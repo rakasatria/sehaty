@@ -12,16 +12,30 @@ ExecStart=/usr/local/bin/sehaty
 Restart=always
 RestartSec=15
 
-# The key is read from a file, not an environment variable — an env var is visible in
-# /proc/<pid>/environ and in systemctl show. 0400, owned by the service user.
+# ── PATH LAYOUT ───────────────────────────────────────────────────────────────
+# One rule governs this block: everything mutable lives under SEHATY_DATA so that
+# "back up Sehaty" is a single path, and the KEY LIVES OUTSIDE IT so that backing
+# up Sehaty never backs up the means to read it. sehaty refuses to start if
+# SEHATY_KEY_FILE is found inside SEHATY_DATA.
+#
+#   /var/lib/sehaty/            SEHATY_DATA      BACKED UP (vzdump, nightly)
+#     ├── sehaty.db             SEHATY_DB        encrypted: Adiantum VFS
+#     ├── sehaty.db-wal                          encrypted (same VFS)
+#     └── media/                SEHATY_MEDIA     <profile>/<kind>/<ab>/<sha256>
+#   /etc/sehaty/key             SEHATY_KEY_FILE  0400 sehaty:sehaty — NOT backed up
+#   /opt/sehaty/exercises.json  SEHATY_EXERCISES read-only, ships with the build
+#
+# The key is read from a FILE, not an environment variable: an env var is visible
+# in /proc/<pid>/environ and in `systemctl show`. A file is not.
 Environment=SEHATY_KEY_FILE=/etc/sehaty/key
-Environment=SEHATY_DB=/var/lib/sehaty/sehaty.db
-Environment=SEHATY_MEDIA_DIR=/var/lib/sehaty/media
-Environment=SEHATY_EXERCISES=/var/lib/sehaty/exercises.json
+Environment=SEHATY_DATA=/var/lib/sehaty
+Environment=SEHATY_EXERCISES=/opt/sehaty/exercises.json
 Environment=SEHATY_MCP_HOST=127.0.0.1
 Environment=SEHATY_MCP_PORT=8765
 
 # Hardening. Cheap here because the service needs one directory and one port.
+# ProtectSystem=strict makes /opt and /etc read-only, which is what we want: the
+# dataset and the key are never written by this process.
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
@@ -32,8 +46,10 @@ ProtectControlGroups=true
 RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
 MemoryDenyWriteExecute=true
 
-StandardOutput=append:/var/log/sehaty.log
-StandardError=append:/var/log/sehaty.log
+# journald, not a file: ProtectSystem=strict makes /var/log read-only, and
+# `journalctl -u sehaty` needs no logrotate config to stop filling the disk.
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=multi-user.target

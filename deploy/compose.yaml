@@ -1,5 +1,12 @@
-# Reference deployment. The point of this file is the SECRET HANDLING, which is the
-# part people get wrong.
+# Reference deployment. The point of this file is the SECRET HANDLING and the PATH
+# SPLIT, which are the two parts people get wrong.
+#
+#   /data              SEHATY_DATA   the volume — database + media. BACKED UP.
+#   /run/secrets/…     the key       tmpfs, never on the volume. NOT BACKED UP.
+#   /opt/sehaty/…      the dataset   read-only bind mount, not user data.
+#
+# sehaty refuses to start if the key file is inside SEHATY_DATA. Keeping them in one
+# volume would put the key in the same archive as the ciphertext it unlocks.
 services:
   sehaty:
     image: ghcr.io/rakasatria/sehaty:latest
@@ -8,7 +15,7 @@ services:
       - "127.0.0.1:8765:8765"     # MCP is a TOOL-EXECUTION surface — never publish it
     volumes:
       - sehaty-data:/data
-      - ./exercises.json:/data/exercises.json:ro
+      - ./exercises.json:/opt/sehaty/exercises.json:ro
     environment:
       # A key passed as an environment variable is NOT a secret: it is visible in
       # `docker inspect`, in `ps` on the host, and in most logging. Point at a file.

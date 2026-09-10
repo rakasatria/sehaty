@@ -8,6 +8,13 @@
 
 **Tech Stack:** Go 1.27 · `github.com/modelcontextprotocol/go-sdk` · `modernc.org/sqlite` (cgo-free, so the binary stays static) · stdlib for everything else.
 
+> **AMENDED 10 Sep, after this plan was executed.** The driver below is **superseded**:
+> `modernc.org/sqlite` cannot encrypt, which left every log in plaintext inside a file that
+> is backed up nightly. Replaced by `github.com/ncruces/go-sqlite3` opened through its
+> **Adiantum VFS** — also cgo-free, also `database/sql`, but it encrypts the whole file.
+> The schema and every query in this plan are unchanged; only `storage.Open` differs.
+> See spec §8c. Steps below are kept as the historical record of what was built.
+
 **Spec:** `docs/superpowers/specs/2026-09-10-sehaty.md`
 
 ## Global Constraints

@@ -1,8 +1,12 @@
 # Sehaty — build and run.
 #
 # Two stages so the shipped image carries a static binary and nothing else: no Go
-# toolchain, no package manager, no shell. CGO_ENABLED=0 is what makes that possible,
-# and is why modernc.org/sqlite was chosen over the cgo sqlite driver.
+# toolchain, no package manager, no shell. CGO_ENABLED=0 is what makes that possible.
+#
+# The SQLite driver is github.com/ncruces/go-sqlite3 — the real SQLite compiled to
+# WebAssembly and translated to Go, so it needs no cgo AND can encrypt the database
+# file through its Adiantum VFS. The more common cgo-free driver, modernc.org/sqlite,
+# cannot encrypt at all, which is why it is not used here.
 
 FROM golang:1.27-alpine AS build
 WORKDIR /src
@@ -14,11 +18,15 @@ RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/sehaty 
 
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=build /out/sehaty /sehaty
+# SEHATY_DATA is the single mutable root: database and media, and nothing else.
+# The KEY is deliberately NOT here — mount it at /run/secrets/sehaty_key. sehaty
+# refuses to start if the key file is found inside SEHATY_DATA, because a key in the
+# same volume as its ciphertext makes the encryption decoration.
+#
 # The exercise dataset is a submodule and is NOT redistributed — its licence is
-# NOASSERTION. Mount it, or run with the submodule checked out and bind-mounted.
-ENV SEHATY_DB=/data/sehaty.db \
-    SEHATY_MEDIA_DIR=/data/media \
-    SEHATY_EXERCISES=/data/exercises.json \
+# NOASSERTION. Bind-mount it read-only at the path below.
+ENV SEHATY_DATA=/data \
+    SEHATY_EXERCISES=/opt/sehaty/exercises.json \
     SEHATY_MCP_HOST=0.0.0.0 \
     SEHATY_MCP_PORT=8765
 VOLUME ["/data"]

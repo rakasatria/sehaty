@@ -76,17 +76,22 @@ func FindFoods(d Deps, a FindFoodsArgs) (FoodsOut, error) {
 	if limit <= 0 {
 		limit = 10
 	}
-	found := d.Food.Search(a.Query, limit)
+	found, exact := d.Food.Search(a.Query, limit)
 	// An empty result must serialise as [] rather than null: a client should not have
 	// to distinguish "no matches" from "field missing".
 	out := FoodsOut{Count: len(found), Foods: []FoodHit{}}
 	for _, f := range found {
 		out.Foods = append(out.Foods, hit(f))
 	}
-	if len(found) == 0 {
+	switch {
+	case len(found) == 0:
 		out.Note = fmt.Sprintf("Nothing in the Indonesian food table (TKPI 2020) matches %q. "+
 			"It lists ingredients, not composite dishes — nasi goreng and gado-gado are not "+
 			"in it and must be logged as their parts.", a.Query)
+	case !exact:
+		out.Note = fmt.Sprintf("No entry matches all of %q, so these match part of it — "+
+			"the table qualifies food differently from the way people speak. Ask which one "+
+			"they mean before logging; do not choose.", a.Query)
 	}
 	return out, nil
 }
@@ -99,16 +104,24 @@ func resolve(t *food.Table, q string) (food.Food, error) {
 	if f, ok := t.ByCode(q); ok {
 		return f, nil
 	}
-	found := t.Search(q, 6)
+	found, exact := t.Search(q, 6)
 	switch {
-	case len(found) == 1:
+	// A loosened match is never resolved automatically, not even when it is the only one.
+	// "Nasi putih" narrowing to "Nasi" is almost certainly right, and "almost certainly"
+	// is not the standard for writing a number into someone's health record.
+	case len(found) == 1 && exact:
 		return found[0], nil
 	case len(found) == 0:
 		return food.Food{}, fmt.Errorf("no food in TKPI 2020 matches %q; use find_foods to "+
 			"search, and note the table lists ingredients rather than composite dishes", q)
 	default:
 		var b strings.Builder
-		fmt.Fprintf(&b, "%q matches %d foods — pass one of these codes instead: ", q, len(found))
+		if exact {
+			fmt.Fprintf(&b, "%q matches %d foods — pass one of these codes instead: ", q, len(found))
+		} else {
+			fmt.Fprintf(&b, "nothing matches all of %q; these match part of it, so ask which "+
+				"is meant and pass its code: ", q)
+		}
 		for i, f := range found {
 			if i > 0 {
 				b.WriteString("; ")

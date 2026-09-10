@@ -62,7 +62,7 @@ func TestTempePasarHasBookValuesNotSpreadsheetValues(t *testing.T) {
 func TestSearchFindsIndonesianNames(t *testing.T) {
 	tab := load(t)
 	for _, q := range []string{"beras giling", "tempe", "tahu", "telur", "ikan"} {
-		if got := tab.Search(q, 5); len(got) == 0 {
+		if got, _ := tab.Search(q, 5); len(got) == 0 {
 			t.Errorf("Search(%q) found nothing", q)
 		}
 	}
@@ -73,13 +73,13 @@ func TestSearchFindsIndonesianNames(t *testing.T) {
 // so nobody later assumes the table is bilingual and builds an English-first UI on it.
 func TestEnglishSearchIsPartialByDesign(t *testing.T) {
 	tab := load(t)
-	if got := tab.Search("rice", 5); len(got) == 0 {
+	if got, _ := tab.Search("rice", 5); len(got) == 0 {
 		t.Error(`Search("rice") found nothing; some rows do carry an English gloss`)
 	}
 	// Note: fuzziness means some English terms DO match by accident — "tempeh" reaches
 	// "tempe" one edit away. That is harmless and useful. "tofu" is two edits from "tahu",
 	// so it stays out of reach until an alias is set.
-	if got := tab.Search("tofu", 5); len(got) != 0 {
+	if got, _ := tab.Search("tofu", 5); len(got) != 0 {
 		t.Errorf(`Search("tofu") returned %d results — the table has no English for tahu, `+
 			`so a hit here means matching has become too loose`, len(got))
 	}
@@ -87,7 +87,7 @@ func TestEnglishSearchIsPartialByDesign(t *testing.T) {
 
 func TestSearchIsRankedNotArbitrary(t *testing.T) {
 	tab := load(t)
-	got := tab.Search("tempe", 5)
+	got, _ := tab.Search("tempe", 5)
 	if len(got) == 0 {
 		t.Fatal("no results for tempe")
 	}
@@ -100,7 +100,7 @@ func TestSearchIsRankedNotArbitrary(t *testing.T) {
 // than the least-bad fuzzy match.
 func TestSearchReturnsNothingForNonsense(t *testing.T) {
 	tab := load(t)
-	if got := tab.Search("zzzqqxnotafood", 5); len(got) != 0 {
+	if got, _ := tab.Search("zzzqqxnotafood", 5); len(got) != 0 {
 		t.Errorf("Search(nonsense) returned %d results: %v", len(got), got[0].NameID)
 	}
 }
@@ -156,7 +156,7 @@ func TestFlaggedFoodsCarryTheirFlags(t *testing.T) {
 // for tempe itself, so an agent taking the top hit would log nearly four times the energy.
 func TestSearchPrefersNamesThatBeginWithTheQuery(t *testing.T) {
 	tab := load(t)
-	got := tab.Search("tempe", 5)
+	got, _ := tab.Search("tempe", 5)
 	if len(got) == 0 {
 		t.Fatal("no results for tempe")
 	}
@@ -179,7 +179,7 @@ func TestSearchToleratesASingleTypo(t *testing.T) {
 		{"berass", "beras"}, // doubled letter
 		{"tahi", "tahu"},    // u -> i
 	} {
-		got := tab.Search(tc.typo, 5)
+		got, _ := tab.Search(tc.typo, 5)
 		if len(got) == 0 {
 			t.Errorf("Search(%q) found nothing; a single typo should still reach %q",
 				tc.typo, tc.want)
@@ -202,10 +202,10 @@ func TestSearchToleratesASingleTypo(t *testing.T) {
 // Fuzziness must not become a licence to guess. Two edits away is a different word.
 func TestFuzzinessDoesNotReachUnrelatedFoods(t *testing.T) {
 	tab := load(t)
-	if got := tab.Search("zzzqqxnotafood", 5); len(got) != 0 {
+	if got, _ := tab.Search("zzzqqxnotafood", 5); len(got) != 0 {
 		t.Errorf("nonsense matched %d foods: %q", len(got), got[0].NameID)
 	}
-	if got := tab.Search("automobile", 5); len(got) != 0 {
+	if got, _ := tab.Search("automobile", 5); len(got) != 0 {
 		t.Errorf("an unrelated English word matched %d foods: %q", len(got), got[0].NameID)
 	}
 }

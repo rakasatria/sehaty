@@ -11,7 +11,7 @@ func TestNameFoodsMakesEnglishSearchWork(t *testing.T) {
 	// it, so fuzzy matching cannot reach it. ("tempeh" would be a bad probe — bleve
 	// matches it to "tempe" one edit away, so English partly works there by accident.)
 	const probe = "curd"
-	if got := d.Food.Search(probe, 5); len(got) != 0 {
+	if got, _ := d.Food.Search(probe, 5); len(got) != 0 {
 		t.Fatalf("%q already matched %d foods before naming", probe, len(got))
 	}
 	out, err := NameFoods(d, NameFoodsArgs{Entries: []FoodNameEntry{
@@ -22,7 +22,7 @@ func TestNameFoodsMakesEnglishSearchWork(t *testing.T) {
 	if out.Saved != 1 {
 		t.Fatalf("saved %d", out.Saved)
 	}
-	got := d.Food.Search(probe, 5)
+	got, _ := d.Food.Search(probe, 5)
 	if len(got) == 0 {
 		t.Fatalf("%q still finds nothing after naming CP061", probe)
 	}
@@ -98,7 +98,7 @@ func TestNameFoodsPersistsAcrossReload(t *testing.T) {
 	if n != 1 {
 		t.Fatalf("reapplied %d aliases, want 1", n)
 	}
-	got := fresh.Food.Search("curd", 3)
+	got, _ := fresh.Food.Search("curd", 3)
 	if len(got) == 0 || got[0].Code != "CP077" {
 		t.Error("alias did not survive the reload")
 	}

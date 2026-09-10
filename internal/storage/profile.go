@@ -99,3 +99,11 @@ func (d *DB) ListProfiles() ([]Profile, error) {
 	}
 	return out, rows.Err()
 }
+
+// ProfileSummary is what list_profiles returns — identity and settings, never logs.
+type ProfileSummary struct {
+	ID              string   `json:"id"`
+	Goal            string   `json:"goal"`
+	Equipment       []string `json:"equipment"`
+	SessionsPerWeek int      `json:"sessions_per_week"`
+}

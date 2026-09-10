@@ -1,0 +1,269 @@
+// Package tools exposes storage and catalog as MCP tools.
+//
+// Handlers are plain functions taking explicit arguments, and the MCP wiring is a thin
+// shell over them. That means behaviour is testable without standing up a transport,
+// which is the difference between a fast test suite and a slow one.
+package tools
+
+import (
+	"fmt"
+	"math/rand"
+	"sort"
+	"strings"
+	"time"
+
+	"github.com/rakasatria/sehaty/internal/catalog"
+	"github.com/rakasatria/sehaty/internal/crypto"
+	"github.com/rakasatria/sehaty/internal/storage"
+)
+
+func today() string { return time.Now().Format("2006-01-02") }
+
+// Deps is what every handler needs. Passed explicitly rather than held in package
+// state so tests can build one per test with a temp database.
+type Deps struct {
+	DB     *storage.DB
+	Cat    *catalog.Catalog
+	Cipher *crypto.Cipher // may be nil: unencrypted documents still work
+}
+
+// Goal drives sets, reps and rest. Fat loss keeps density high; strength trades volume
+// for load. These are prescriptions, not preferences, so they live in code rather than
+// being asked of a model every time.
+var goals = map[string]struct {
+	Sets             int
+	Reps, Rest, Note string
+}{
+	"fat_loss":    {3, "10-15", "45-60s", "Keep density high. Intake decides body composition, not volume."},
+	"strength":    {4, "4-6", "2-3 min", "Heavy, long rests. Add load before reps."},
+	"hypertrophy": {3, "8-12", "60-90s", "Most sets close to failure."},
+	"general":     {3, "8-12", "60s", "Sustainable beats optimal."},
+}
+
+var blocks = map[string][]struct {
+	Part string
+	N    int
+}{
+	"full":  {{"upper legs", 2}, {"chest", 1}, {"back", 2}, {"shoulders", 1}, {"waist", 1}},
+	"upper": {{"chest", 2}, {"back", 2}, {"shoulders", 2}, {"upper arms", 2}},
+	"lower": {{"upper legs", 3}, {"lower legs", 1}, {"waist", 2}},
+}
+
+type PlanOut struct {
+	Profile   string             `json:"profile"`
+	Date      string             `json:"date"`
+	Focus     string             `json:"focus"`
+	Minutes   int                `json:"minutes"`
+	Goal      string             `json:"goal"`
+	Sets      int                `json:"sets"`
+	Reps      string             `json:"reps"`
+	Rest      string             `json:"rest"`
+	Note      string             `json:"note"`
+	Exercises []catalog.Exercise `json:"exercises"`
+	RotatedOut int               `json:"rotated_out"`
+}
+
+// fnv is a small deterministic hash so a plan is stable for a whole day and different
+// tomorrow. A plan that reshuffles on every call cannot be followed.
+func fnv(s string) int64 {
+	var h uint64 = 14695981039346656037
+	for _, c := range []byte(s) {
+		h ^= uint64(c)
+		h *= 1099511628211
+	}
+	return int64(h >> 1)
+}
+
+func PlanSession(d Deps, profileID, focus string, minutes int) (PlanOut, error) {
+	blk, ok := blocks[focus]
+	if !ok {
+		return PlanOut{}, fmt.Errorf("focus must be full, upper or lower; got %q", focus)
+	}
+	p, err := d.DB.GetProfile(profileID)
+	if err != nil {
+		return PlanOut{}, err
+	}
+	if minutes <= 0 {
+		minutes = p.SessionMinutes
+	}
+	recent := map[string]bool{}
+	if sets, err := d.DB.Sets(profileID, 10); err == nil {
+		for _, s := range sets {
+			recent[strings.ToLower(s.Exercise)] = true
+		}
+	}
+	byPart := map[string][]catalog.Exercise{}
+	for _, e := range d.Cat.For(p.Equipment, p.MaxDifficulty) {
+		k := strings.ToLower(e.BodyPart)
+		byPart[k] = append(byPart[k], e)
+	}
+	rng := rand.New(rand.NewSource(fnv(today() + focus + profileID)))
+	var picked []catalog.Exercise
+	for _, b := range blk {
+		pool := byPart[b.Part]
+		var fresh []catalog.Exercise
+		for _, e := range pool {
+			if !recent[strings.ToLower(e.Name)] {
+				fresh = append(fresh, e)
+			}
+		}
+		if len(fresh) == 0 {
+			fresh = pool
+		}
+		rng.Shuffle(len(fresh), func(i, j int) { fresh[i], fresh[j] = fresh[j], fresh[i] })
+		for i := 0; i < b.N && i < len(fresh); i++ {
+			picked = append(picked, fresh[i])
+		}
+	}
+	if capN := minutes / 5; capN >= 4 && len(picked) > capN {
+		picked = picked[:capN]
+	}
+	g := goals[p.Goal]
+	return PlanOut{Profile: profileID, Date: today(), Focus: focus, Minutes: minutes,
+		Goal: p.Goal, Sets: g.Sets, Reps: g.Reps, Rest: g.Rest, Note: g.Note,
+		Exercises: picked, RotatedOut: len(recent)}, nil
+}
+
+type LogOut struct {
+	Profile  string  `json:"profile"`
+	Exercise string  `json:"exercise"`
+	Sets     int     `json:"sets"`
+	Reps     int     `json:"reps"`
+	WeightKg float64 `json:"weight_kg"`
+	VolumeKg float64 `json:"volume_kg"`
+}
+
+func LogSet(d Deps, profileID, exercise string, sets, reps int, weightKg float64) (LogOut, error) {
+	p, err := d.DB.GetProfile(profileID)
+	if err != nil {
+		return LogOut{}, err
+	}
+	ex, ok := d.Cat.ByName(exercise)
+	if !ok {
+		return LogOut{}, fmt.Errorf("%q is not in the exercise catalog", exercise)
+	}
+	allowed := false
+	for _, eq := range p.Equipment {
+		if strings.EqualFold(eq, ex.Equipment) {
+			allowed = true
+			break
+		}
+	}
+	if !allowed {
+		return LogOut{}, fmt.Errorf("%q needs %s, which %s does not have",
+			ex.Name, ex.Equipment, profileID)
+	}
+	vol := float64(sets*reps) * weightKg
+	if err := d.DB.LogSet(profileID, storage.SetEntry{Date: today(), Exercise: ex.Name,
+		BodyPart: ex.BodyPart, Sets: sets, Reps: reps, WeightKg: weightKg,
+		VolumeKg: vol}); err != nil {
+		return LogOut{}, err
+	}
+	return LogOut{Profile: profileID, Exercise: ex.Name, Sets: sets, Reps: reps,
+		WeightKg: weightKg, VolumeKg: vol}, nil
+}
+
+type ProgressOut struct {
+	Profile         string         `json:"profile"`
+	Days            int            `json:"days"`
+	LiftingSessions int            `json:"lifting_sessions"`
+	TargetSessions  int            `json:"target_sessions"`
+	SetsLogged      int            `json:"sets_logged"`
+	TotalVolumeKg   float64        `json:"total_volume_kg"`
+	CardioSessions  int            `json:"cardio_sessions"`
+	CardioMinutes   float64        `json:"cardio_minutes"`
+	FoodDaysLogged  int            `json:"food_days_logged"`
+	MuscleCoverage  map[string]int `json:"muscle_coverage"`
+	// Pointer, not float: no weigh-ins must read as "unknown", never as 0 kg. A
+	// fabricated zero in a weight log is worse than an absent one.
+	LatestWeightKg *float64 `json:"latest_weight_kg"`
+	Note           string   `json:"note,omitempty"`
+}
+
+func Progress(d Deps, profileID string, days int) (ProgressOut, error) {
+	p, err := d.DB.GetProfile(profileID)
+	if err != nil {
+		return ProgressOut{}, err
+	}
+	sets, err := d.DB.Sets(profileID, days)
+	if err != nil {
+		return ProgressOut{}, err
+	}
+	out := ProgressOut{Profile: profileID, Days: days, MuscleCoverage: map[string]int{},
+		TargetSessions: days * p.SessionsPerWeek / 7}
+	dates := map[string]bool{}
+	for _, s := range sets {
+		dates[s.Date] = true
+		out.TotalVolumeKg += s.VolumeKg
+		out.MuscleCoverage[s.BodyPart]++
+	}
+	out.LiftingSessions, out.SetsLogged = len(dates), len(sets)
+	if c, err := d.DB.Cardio(profileID, days); err == nil {
+		out.CardioSessions = len(c)
+		for _, x := range c {
+			out.CardioMinutes += x.Minutes
+		}
+	}
+	if f, err := d.DB.Foods(profileID, days); err == nil {
+		fd := map[string]bool{}
+		for _, x := range f {
+			fd[x.Date] = true
+		}
+		out.FoodDaysLogged = len(fd)
+	}
+	if w, err := d.DB.Weights(profileID, days); err == nil && len(w) > 0 {
+		kg := w[len(w)-1].WeightKg
+		out.LatestWeightKg = &kg
+	}
+	if out.FoodDaysLogged == 0 && p.Goal == "fat_loss" {
+		out.Note = "no food logged — for fat loss this is the half that decides it"
+	}
+	return out, nil
+}
+
+func FindExercises(d Deps, profileID, muscle string, limit int) ([]catalog.Exercise, error) {
+	p, err := d.DB.GetProfile(profileID)
+	if err != nil {
+		return nil, err
+	}
+	var out []catalog.Exercise
+	for _, e := range d.Cat.For(p.Equipment, p.MaxDifficulty) {
+		hay := strings.ToLower(e.Name + " " + e.BodyPart + " " + e.Target)
+		if muscle != "" && !strings.Contains(hay, strings.ToLower(muscle)) {
+			continue
+		}
+		out = append(out, e)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
+}
+
+// Register binds an external account to a profile, creating the profile if new.
+// The passphrase is the registration gate — see spec §8c. It is compared in full and
+// a mismatch reveals nothing about how close the attempt was.
+func Register(d Deps, channel, externalID, profileID, passphrase, want string) (string, error) {
+	if want == "" {
+		return "", fmt.Errorf("registration is closed: no passphrase configured")
+	}
+	if passphrase != want {
+		return "", fmt.Errorf("incorrect passphrase")
+	}
+	if !storage.ValidID(profileID) {
+		return "", fmt.Errorf("profile id must be lowercase letters, digits, - or _")
+	}
+	if _, err := d.DB.GetProfile(profileID); err != nil {
+		if err := d.DB.SaveProfile(storage.Profile{ID: profileID,
+			Equipment: []string{"body weight"}, Goal: "general", SessionsPerWeek: 3,
+			SessionMinutes: 50, Experience: "beginner", MaxDifficulty: 3,
+			Locale: "en"}); err != nil {
+			return "", err
+		}
+	}
+	if err := d.DB.LinkIdentity(channel, externalID, profileID); err != nil {
+		return "", err
+	}
+	return profileID, nil
+}

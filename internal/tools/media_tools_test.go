@@ -149,3 +149,23 @@ func TestAttachMediaRejectsNonBase64(t *testing.T) {
 		t.Fatal("accepted data that is not base64")
 	}
 }
+
+// The stored bytes are the truth about what a file is. Defaulting the type from the kind
+// reported image/jpeg for a PNG.
+func TestSniffMIMEUsesTheBytesNotTheKind(t *testing.T) {
+	png := []byte("\x89PNG\r\n\x1a\n" + strings.Repeat("\x00", 32))
+	if got := sniffMIME(png, media.KindPhoto); got != "image/png" {
+		t.Errorf("PNG sniffed as %q, want image/png", got)
+	}
+	jpeg := append([]byte{0xff, 0xd8, 0xff}, make([]byte, 32)...)
+	if got := sniffMIME(jpeg, media.KindPhoto); got != "image/jpeg" {
+		t.Errorf("JPEG sniffed as %q, want image/jpeg", got)
+	}
+	// Unrecognised bytes fall back to what the kind implies rather than guessing.
+	if got := sniffMIME([]byte{0x01, 0x02, 0x03}, media.KindVoice); got != "audio/ogg" {
+		t.Errorf("unknown bytes sniffed as %q, want the voice default audio/ogg", got)
+	}
+	if got := sniffMIME(nil, media.KindPhoto); got != "image/jpeg" {
+		t.Errorf("empty input sniffed as %q", got)
+	}
+}

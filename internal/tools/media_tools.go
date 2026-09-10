@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
+	"net/http"
 	"strings"
 
 	"github.com/rakasatria/sehaty/internal/crypto"
@@ -92,6 +93,31 @@ type GetMediaArgs struct {
 	Profile string `json:"profile"`
 	Kind    string `json:"kind,omitempty" jsonschema:"photo or voice; defaults to photo"`
 	Hash    string `json:"hash" jsonschema:"the content hash returned by attach_media or stored on a food entry"`
+}
+
+// sniffMIME derives the content type from the BYTES rather than from the kind.
+//
+// The stored file is the truth. Defaulting from the kind reported image/jpeg for a PNG,
+// which would send a client a mislabelled image — and the MIME the uploader claimed is not
+// stored anywhere, so guessing from kind was the only alternative. Sniffing cannot go
+// stale and needs no schema change.
+func sniffMIME(raw []byte, kind media.Kind) string {
+	if len(raw) == 0 {
+		return defaultMIME[kind]
+	}
+	n := 512
+	if len(raw) < n {
+		n = len(raw)
+	}
+	got := http.DetectContentType(raw[:n])
+	if got == "" || strings.HasPrefix(got, "application/octet-stream") {
+		return defaultMIME[kind] // unrecognised: fall back to what the kind implies
+	}
+	// DetectContentType appends a charset for text-ish results; media has none.
+	if i := strings.IndexByte(got, ';'); i > 0 {
+		got = strings.TrimSpace(got[:i])
+	}
+	return got
 }
 
 // GetMediaBytes fetches and decrypts one blob.

@@ -283,7 +283,7 @@ func RegisterTools(s *mcp.Server, d Deps, passphrase string) {
 			if err != nil {
 				return nil, struct{}{}, err
 			}
-			mime := defaultMIME[kind]
+			mime := sniffMIME(raw, kind)
 			var content mcp.Content
 			if kind == media.KindVoice {
 				content = &mcp.AudioContent{Data: raw, MIMEType: mime}

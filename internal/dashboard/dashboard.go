@@ -143,6 +143,11 @@ func build(d Deps, profileID string) (view, error) {
 			fmt.Sprintf("%.0f g · %.0f kcal", f.Grams, f.Kcal)})
 	}
 	v.FoodDays = len(fdays)
+	// Rounded here, not in the template: floating-point accumulation produces values
+	// like 1273.4999999999998, and a health record must not display a number nobody
+	// logged. A template cannot do arithmetic, so this has to happen in Go.
+	v.Kcal = float64(int(v.Kcal + 0.5))
+	v.Protein = float64(int(v.Protein + 0.5))
 
 	// Newest first, and bounded: a dashboard is a summary, not an export.
 	for i, j := 0, len(v.Recent)-1; i < j; i, j = i+1, j-1 {
@@ -182,23 +187,143 @@ footer{margin-top:34px;padding-top:14px;border-top:1px solid var(--rule);color:v
 font-size:.75rem;font-family:ui-monospace,monospace}
 {{end}}
 
-{{define "page"}}<!doctype html><html lang="en"><head>{{template "head"}}</style></head><body><div class="wrap">
-<h1>{{.Name}}</h1>
-<p class="sub">last 30 days · goal {{.Goal}} · link expires {{.Expires}}</p>
-{{if .Limits}}<div class="warn"><strong>Stated limitations:</strong> {{range $i,$l := .Limits}}{{if $i}}, {{end}}{{$l}}{{end}}</div>{{end}}
-<div class="grid">
-<div class="card"><div class="k">Weight</div><div class="v">{{if .Weight}}{{.WeightStr}} <small>kg</small><br><small>{{.WeightAgo}}</small>{{else}}<small class="empty">not recorded</small>{{end}}</div></div>
-<div class="card"><div class="k">Sessions</div><div class="v">{{.Sessions}}</div></div>
-<div class="card"><div class="k">Sets</div><div class="v">{{.Sets}}</div></div>
-<div class="card"><div class="k">Cardio</div><div class="v">{{.Cardio}} <small>min</small></div></div>
-<div class="card"><div class="k">Days logged</div><div class="v">{{.FoodDays}}</div></div>
-<div class="card"><div class="k">Protein</div><div class="v">{{printf "%.0f" .Protein}} <small>g</small></div></div>
-</div>
-<h2>Recent</h2>
-{{if .Recent}}<table>{{range .Recent}}<tr><td class="d">{{.Date}}</td><td>{{.What}}</td><td class="x">{{.Detail}}</td></tr>{{end}}</table>
-{{else}}<p class="empty">Nothing logged in the last 30 days.</p>{{end}}
-<footer>Sehaty · this link stops working an hour after it was made</footer>
-</div></body></html>{{end}}
+{{define "page"}}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Sehaty — {{.Name}}</title>
+<style>
+:root{
+  color-scheme:light;
+  --ink:#16211f; --soft:#41514c; --faint:#6d7e78;
+  --paper:#f4f6f4; --card:#ffffff; --rule:#d6dcd7; --accent:#1f6f5c;
+  --serif:'Iowan Old Style','Palatino Linotype',Palatino,Georgia,serif;
+  --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;
+  --mono:ui-monospace,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    color-scheme:dark;
+    --ink:#dfe5e0; --soft:#a8b4ae; --faint:#7d8a85;
+    --paper:#101614; --card:#18211e; --rule:#26312d; --accent:#4fae93;
+  }
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--paper);color:var(--ink);font:100%/1.55 var(--sans);padding:1.4rem 1.1rem 3rem}
+main{max-width:38rem;margin:0 auto}
+.lab{font:.68rem/1.5 var(--mono);letter-spacing:.17em;text-transform:uppercase;color:var(--faint)}
+.sub{font:.72rem/1.7 var(--mono);letter-spacing:.04em;color:var(--faint)}
+h1{font-family:var(--serif);font-weight:500;font-size:2rem;line-height:1.15;margin:.3rem 0 .45rem}
+.meta{font:.75rem/1.8 var(--mono);letter-spacing:.05em;color:var(--soft)}
+.limits{border-left:2px solid var(--accent);padding:.2rem 0 .25rem .85rem;margin-top:1.15rem}
+.limits .body{font-size:.95rem;margin:.2rem 0 .1rem}
+.limits span+span::before{content:" · ";color:var(--faint)}
+section{margin-top:2.1rem}
+h2.lab{margin-bottom:.55rem}
+.hero{background:var(--card);border:1px solid var(--rule);border-radius:4px;padding:1.05rem 1.1rem 1.15rem}
+.big{font-family:var(--serif);font-size:3.1rem;line-height:1.05;font-variant-numeric:tabular-nums;margin-top:.35rem}
+.big .unit{font:.78rem var(--mono);letter-spacing:.08em;color:var(--soft)}
+.big.off{font-size:1.5rem;font-style:italic;font-weight:400;color:var(--faint);margin-top:.75rem}
+figure{margin-top:1rem}
+.fig{display:block;width:100%;height:auto}
+.fig line{stroke:var(--faint);stroke-width:2;stroke-linecap:round;stroke-dasharray:.1 8}
+.fig circle{fill:var(--accent)}
+figcaption{font:.7rem/1.6 var(--mono);letter-spacing:.03em;color:var(--faint);margin-top:.5rem}
+dl div{display:flex;justify-content:space-between;align-items:baseline;gap:1rem;border-top:1px solid var(--rule);padding:.6rem 0}
+dl div:last-child{border-bottom:1px solid var(--rule)}
+dt{font-size:.92rem;color:var(--soft)}
+dd b{font:600 1.35rem var(--serif);font-variant-numeric:tabular-nums}
+dd i{font:.7rem var(--mono);font-style:normal;letter-spacing:.06em;color:var(--faint)}
+.none{font:.78rem var(--mono);letter-spacing:.05em;color:var(--faint)}
+.none::before{content:"";display:inline-block;width:1.7em;border-top:2px dotted var(--faint);vertical-align:.28em;margin-right:.55em}
+.foot{font-size:.92rem;color:var(--soft);margin-top:.9rem}
+.foot b{font:600 1.05rem var(--serif);font-variant-numeric:tabular-nums;color:var(--ink)}
+ul{list-style:none;margin-top:.65rem}
+li{display:grid;grid-template-columns:auto 1fr auto;gap:0 .8rem;align-items:baseline;border-top:1px solid var(--rule);padding:.5rem 0}
+li:last-child{border-bottom:1px solid var(--rule)}
+.d{font:.68rem var(--mono);color:var(--faint);font-variant-numeric:tabular-nums}
+.w{font-size:.92rem;overflow-wrap:anywhere}
+.t{font:.72rem var(--mono);color:var(--soft);text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.empty{font:italic 1.1rem var(--serif);color:var(--soft);border-top:2px dotted var(--rule);border-bottom:2px dotted var(--rule);padding:1.05rem 0;margin-top:.65rem}
+footer{margin-top:2.7rem;border-top:1px solid var(--rule);padding-top:1rem}
+footer p+p{margin-top:.35rem}
+</style>
+</head>
+<body>
+<main>
+
+<header>
+  <p class="lab">Sehaty · personal health record</p>
+  <h1>{{.Name}}</h1>
+  <p class="meta">goal — {{.Goal}}<br>equipment — {{.Equipment}}</p>
+  {{if .Limits}}
+  <div class="limits">
+    <p class="lab">on record</p>
+    <p class="body">{{range .Limits}}<span>{{.}}</span>{{end}}</p>
+    <p class="sub">training is prescribed around what is noted here.</p>
+  </div>
+  {{end}}
+</header>
+
+<section class="hero">
+  <p class="lab">weight</p>
+  {{if .Weight}}
+  <p class="big">{{.WeightStr}}<span class="unit"> kg</span></p>
+  <p class="sub">last measured {{.WeightAgo}}</p>
+  {{else}}
+  <p class="big off">not recorded</p>
+  <p class="sub">no weigh-in has ever been logged</p>
+  {{end}}
+  <figure>
+    <svg class="fig" viewBox="0 0 400 40" aria-hidden="true">
+      {{if .Weight}}<line x1="8" y1="22" x2="334" y2="22"></line><circle cx="334" cy="22" r="5"></circle>{{else}}<line x1="8" y1="22" x2="392" y2="22"></line>{{end}}
+    </svg>
+    <figcaption>{{if .Weight}}fig. 1 — the last known point; the dotted line is time unmeasured{{else}}fig. 1 — never measured; drawn as a dotted line, not as zero{{end}}</figcaption>
+  </figure>
+</section>
+
+<section>
+  <h2 class="lab">the last 30 days</h2>
+  <dl>
+    <div><dt>days trained</dt><dd>{{if .Sessions}}<b>{{.Sessions}}</b> <i>of 30</i>{{else}}<span class="none">not recorded</span>{{end}}</dd></div>
+    <div><dt>sets logged</dt><dd>{{if .Sets}}<b>{{.Sets}}</b>{{else}}<span class="none">not recorded</span>{{end}}</dd></div>
+    <div><dt>cardio</dt><dd>{{if .Cardio}}<b>{{.Cardio}}</b> <i>min</i>{{else}}<span class="none">not recorded</span>{{end}}</dd></div>
+    <div><dt>days with food logged</dt><dd>{{if .FoodDays}}<b>{{.FoodDays}}</b> <i>of 30</i>{{else}}<span class="none">not recorded</span>{{end}}</dd></div>
+  </dl>
+  {{if .FoodDays}}
+  <p class="foot">food logged over the window, in total: <b>{{.Kcal}}</b> kcal · <b>{{.Protein}}</b> g protein</p>
+  <p class="sub">whole-window totals — not daily figures, and only what was written down.</p>
+  {{else}}
+  <p class="foot">No food was logged in this window, so there is nothing to total.</p>
+  <p class="sub">sehaty totals what is written down; it does not estimate.</p>
+  {{end}}
+</section>
+
+<section>
+  <h2 class="lab">log</h2>
+  {{if .Recent}}
+  <p class="sub">newest first · {{len .Recent}} shown</p>
+  <ul>
+    {{range .Recent}}<li><span class="d">{{.Date}}</span><span class="w">{{.What}}</span><span class="t">{{.Detail}}</span></li>
+    {{end}}
+  </ul>
+  {{else}}
+  <p class="empty">Nothing recorded in the last 30 days.</p>
+  <p class="sub">an unwritten page, not a zero.</p>
+  {{end}}
+</section>
+
+<footer>
+  {{if .Limits}}{{else}}<p class="sub">no injuries or conditions on record.</p>{{end}}
+  <p class="sub">signed link — good until {{.Expires}}. the key lapses; the record goes on.</p>
+  <p class="sub">self-hosted · no scripts · no third-party requests.</p>
+</footer>
+
+</main>
+</body>
+</html>{{end}}
 
 {{define "state"}}
 .state{max-width:31rem;margin:13vh auto 0;text-align:center}

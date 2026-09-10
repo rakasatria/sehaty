@@ -198,3 +198,26 @@ func TestPutDocumentRejectsAnEmptyBody(t *testing.T) {
 		t.Fatal("stored an empty document")
 	}
 }
+
+// Writing a new body must not blank metadata the caller did not mention.
+func TestPutDocumentCarriesTitleAndKindForward(t *testing.T) {
+	d := foodDeps(t)
+	if _, err := PutDocument(d, PutDocumentArgs{Profile: "raka", Key: "diet",
+		Title: "Nutritionist plan", Kind: "prescription", Body: "v1", CreateNew: true}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := PutDocument(d, PutDocumentArgs{Profile: "raka", Key: "diet",
+		Body: "v2", ExpectedVersion: 1}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := GetDocument(d, GetDocumentArgs{Profile: "raka", Key: "diet"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Title != "Nutritionist plan" {
+		t.Errorf("title = %q after a body-only update; it should have carried forward", got.Title)
+	}
+	if got.Kind != "prescription" {
+		t.Errorf("kind = %q after a body-only update", got.Kind)
+	}
+}

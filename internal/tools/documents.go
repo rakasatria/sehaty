@@ -76,10 +76,11 @@ func PutDocument(d Deps, a PutDocumentArgs) (PutDocumentOut, error) {
 	}
 	var head int
 	var known []string
+	var headTitle, headKind string
 	for _, e := range existing {
 		known = append(known, e.Key)
 		if e.Key == key {
-			head = e.Version
+			head, headTitle, headKind = e.Version, e.Title, e.Kind
 		}
 	}
 
@@ -107,11 +108,20 @@ func PutDocument(d Deps, a PutDocumentArgs) (PutDocumentOut, error) {
 	if head == 0 {
 		expected = 0
 	}
+	// An update that omits title or kind must CARRY THEM FORWARD, not blank them. Writing
+	// a new body previously replaced "Nutritionist plan" with the bare key, quietly losing
+	// metadata the caller never intended to touch.
 	title := a.Title
+	if title == "" {
+		title = headTitle
+	}
 	if title == "" {
 		title = key
 	}
 	kind := a.Kind
+	if kind == "" {
+		kind = headKind
+	}
 	if kind == "" {
 		kind = "note"
 	}

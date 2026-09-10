@@ -10,7 +10,6 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"os"
 
@@ -69,16 +68,10 @@ func main() {
 		fmt.Printf("%d profile(s)\n", len(ps))
 
 	case "delete-profile":
-		fs := flag.NewFlagSet("delete-profile", flag.ExitOnError)
-		confirm := fs.Bool("yes-really-delete", false,
-			"actually delete; without it nothing is removed")
-		if err := fs.Parse(args[1:]); err != nil {
-			fail(err)
-		}
-		if fs.NArg() < 1 {
+		id, confirmed := parseDelete(args[1:])
+		if id == "" {
 			fail(fmt.Errorf("usage: sehatyctl delete-profile <id> [--yes-really-delete]"))
 		}
-		id := fs.Arg(0)
 		p, err := db.GetProfile(id)
 		if err != nil {
 			fail(err)
@@ -93,7 +86,7 @@ func main() {
 		fmt.Printf("training     %d entries\nweight       %d entries\nfood         %d entries\n"+
 			"cardio       %d entries\ndocuments    %d (all versions)\n",
 			len(sets), len(weights), len(foods), len(cardio), len(docs))
-		if !*confirm {
+		if !confirmed {
 			fmt.Println("\nnothing deleted. Re-run with --yes-really-delete to proceed.")
 			return
 		}

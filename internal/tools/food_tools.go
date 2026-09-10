@@ -146,7 +146,7 @@ func LogFood(d Deps, a LogFoodArgs) (LogFoodOut, error) {
 	if d.Food == nil {
 		return LogFoodOut{}, fmt.Errorf("no food table loaded")
 	}
-	if _, err := d.DB.GetProfile(a.Profile); err != nil {
+	if _, err := requireProfile(d, a.Profile); err != nil {
 		return LogFoodOut{}, err
 	}
 	if a.Grams <= 0 {

@@ -59,7 +59,7 @@ type PutDocumentOut struct {
 }
 
 func PutDocument(d Deps, a PutDocumentArgs) (PutDocumentOut, error) {
-	if _, err := d.DB.GetProfile(a.Profile); err != nil {
+	if _, err := requireProfile(d, a.Profile); err != nil {
 		return PutDocumentOut{}, err
 	}
 	key, err := canonicalKey(a.Key)

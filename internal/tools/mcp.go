@@ -116,6 +116,7 @@ func ok[T any](v T) (*mcp.CallToolResult, T, error) { return nil, v, nil }
 // call, so each says what the tool does AND what it refuses to do.
 func RegisterTools(s *mcp.Server, d Deps, passphrase string) {
 	mcp.AddTool(s, &mcp.Tool{Name: "list_profiles",
+		Annotations: annRead(),
 		Description: "List every profile on this server. Returns names and goals only, never anyone's logs."},
 		func(ctx context.Context, r *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, ProfilesOut, error) {
 			ps, err := d.DB.ListProfiles()
@@ -131,6 +132,7 @@ func RegisterTools(s *mcp.Server, d Deps, passphrase string) {
 		})
 
 	mcp.AddTool(s, &mcp.Tool{Name: "get_profile",
+		Annotations: annRead(),
 		Description: "One profile's settings, plus how many exercises their equipment allows."},
 		func(ctx context.Context, r *mcp.CallToolRequest, a ProfileArgs) (*mcp.CallToolResult, map[string]any, error) {
 			p, err := d.DB.GetProfile(a.Profile)
@@ -148,6 +150,7 @@ func RegisterTools(s *mcp.Server, d Deps, passphrase string) {
 		})
 
 	mcp.AddTool(s, &mcp.Tool{Name: "update_profile",
+		Annotations: annOverwrite(),
 		Description: "Change a profile's equipment, goal, experience or session settings. Only the fields supplied are changed. Rejects unknown equipment rather than leaving someone with no exercises and no explanation."},
 		func(ctx context.Context, r *mcp.CallToolRequest, a UpdateProfileArgs) (*mcp.CallToolResult, map[string]any, error) {
 			p, err := UpdateProfile(d, a)
@@ -164,6 +167,7 @@ func RegisterTools(s *mcp.Server, d Deps, passphrase string) {
 		})
 
 	mcp.AddTool(s, &mcp.Tool{Name: "register",
+		Annotations: annAdd(),
 		Description: "Bind a channel account to a profile, creating it if new. Requires the registration passphrase; without the correct passphrase nothing is created."},
 		func(ctx context.Context, r *mcp.CallToolRequest, a RegisterArgs) (*mcp.CallToolResult, map[string]any, error) {
 			id, err := Register(d, a.Channel, a.ExternalID, a.Profile, a.Passphrase, passphrase)
@@ -174,6 +178,7 @@ func RegisterTools(s *mcp.Server, d Deps, passphrase string) {
 		})
 
 	mcp.AddTool(s, &mcp.Tool{Name: "find_exercises",
+		Annotations: annRead(),
 		Description: "Search exercises this profile can actually perform. Never returns movements needing equipment they lack, or above their difficulty cap."},
 		func(ctx context.Context, r *mcp.CallToolRequest, a FindArgs) (*mcp.CallToolResult, ExercisesOut, error) {
 			if a.Limit == 0 {
@@ -187,6 +192,7 @@ func RegisterTools(s *mcp.Server, d Deps, passphrase string) {
 		})
 
 	mcp.AddTool(s, &mcp.Tool{Name: "plan_session",
+		Annotations: annRead(),
 		Description: "Build today's resistance session. Rotates away from the last 10 days and is stable for the whole day."},
 		func(ctx context.Context, r *mcp.CallToolRequest, a PlanArgs) (*mcp.CallToolResult, PlanOut, error) {
 			if a.Focus == "" {
@@ -200,6 +206,7 @@ func RegisterTools(s *mcp.Server, d Deps, passphrase string) {
 		})
 
 	mcp.AddTool(s, &mcp.Tool{Name: "cardio_protocol",
+		Annotations: annRead(),
 		Description: "Treadmill protocol: zone2, incline, intervals or easy. zone2 is the default because it is the intensity people sustain."},
 		func(ctx context.Context, r *mcp.CallToolRequest, a CardioArgs) (*mcp.CallToolResult, map[string]any, error) {
 			if a.Protocol == "" {
@@ -217,6 +224,7 @@ func RegisterTools(s *mcp.Server, d Deps, passphrase string) {
 		})
 
 	mcp.AddTool(s, &mcp.Tool{Name: "log_set",
+		Annotations: annAdd(),
 		Description: "Record a completed set. Refuses exercises outside the profile's equipment."},
 		func(ctx context.Context, r *mcp.CallToolRequest, a LogSetArgs) (*mcp.CallToolResult, LogOut, error) {
 			o, err := LogSet(d, a.Profile, a.Exercise, a.Sets, a.Reps, a.WeightKg)
@@ -227,6 +235,7 @@ func RegisterTools(s *mcp.Server, d Deps, passphrase string) {
 		})
 
 	mcp.AddTool(s, &mcp.Tool{Name: "log_cardio",
+		Annotations: annAdd(),
 		Description: "Record a treadmill session."},
 		func(ctx context.Context, r *mcp.CallToolRequest, a LogCardioArgs) (*mcp.CallToolResult, map[string]any, error) {
 			err := d.DB.LogCardio(a.Profile, storage.CardioEntry{Date: today(),
@@ -238,6 +247,7 @@ func RegisterTools(s *mcp.Server, d Deps, passphrase string) {
 		})
 
 	mcp.AddTool(s, &mcp.Tool{Name: "list_documents",
+		Annotations: annRead(),
 		Description: "List a profile's stored documents — the nutritionist's prescription, clinical notes, injury history — with their current version numbers. Call this BEFORE writing any document, so you reuse an existing key instead of inventing a second name for the same thing. Does NOT return document bodies; use get_document for that. Returns each document's key, title, current version and last-updated time, plus suggested keys for documents this profile does not have yet."},
 		func(ctx context.Context, r *mcp.CallToolRequest, a ProfileArgs) (*mcp.CallToolResult, ListDocumentsOut, error) {
 			out, err := ListDocuments(d, a.Profile)
@@ -248,6 +258,7 @@ func RegisterTools(s *mcp.Server, d Deps, passphrase string) {
 		})
 
 	mcp.AddTool(s, &mcp.Tool{Name: "get_document",
+		Annotations: annRead(),
 		Description: "Read one document, current version by default or a specific earlier version. Call this whenever you need what a document actually says, and always immediately before writing changes back to it. Do NOT rely on a copy you read earlier in the conversation — it may have moved. Returns the markdown body, the version number, and the expected_version value to pass when writing your changes."},
 		func(ctx context.Context, r *mcp.CallToolRequest, a GetDocumentArgs) (*mcp.CallToolResult, GetDocumentOut, error) {
 			out, err := GetDocument(d, a)
@@ -258,6 +269,7 @@ func RegisterTools(s *mcp.Server, d Deps, passphrase string) {
 		})
 
 	mcp.AddTool(s, &mcp.Tool{Name: "put_document",
+		Annotations: annAdd(),
 		Description: "Store a document as a NEW VERSION, keeping every earlier version readable. Call this to record a nutritionist's prescription, clinical notes or injury history, passing create_new for a document that does not exist yet. Do NOT write without first reading: updating an existing document requires expected_version from get_document, so a stale copy cannot overwrite newer content. Returns the new version number; a near-duplicate key or a stale expected_version is refused with an explanation rather than silently applied."},
 		func(ctx context.Context, r *mcp.CallToolRequest, a PutDocumentArgs) (*mcp.CallToolResult, PutDocumentOut, error) {
 			out, err := PutDocument(d, a)
@@ -268,6 +280,7 @@ func RegisterTools(s *mcp.Server, d Deps, passphrase string) {
 		})
 
 	mcp.AddTool(s, &mcp.Tool{Name: "document_history",
+		Annotations: annRead(),
 		Description: "List every stored version of one document, newest first. Call this to answer questions about what a document used to say — what the nutritionist prescribed in September, before the revision. Does NOT return bodies; pass a version number to get_document to read one. Returns each version's number, title and timestamp."},
 		func(ctx context.Context, r *mcp.CallToolRequest, a GetDocumentArgs) (*mcp.CallToolResult, DocumentHistoryOut, error) {
 			out, err := DocumentHistory(d, a.Profile, a.Key)
@@ -278,6 +291,7 @@ func RegisterTools(s *mcp.Server, d Deps, passphrase string) {
 		})
 
 	mcp.AddTool(s, &mcp.Tool{Name: "find_foods",
+		Annotations: annRead(),
 		Description: "Search the Indonesian food composition table (TKPI 2020) and return per-100g energy and macros for each match. Call this when someone names a food and you need its exact table entry before logging it, or when they ask what is in a food. Do NOT use it for composite dishes — the table lists ingredients, so nasi goreng and gado-gado are absent and must be logged as their parts. Returns each food's code, name, per-100g macros, its original source citation, and any verification flag meaning the value could not be confirmed across sources."},
 		func(ctx context.Context, r *mcp.CallToolRequest, a FindFoodsArgs) (*mcp.CallToolResult, FoodsOut, error) {
 			out, err := FindFoods(d, a)
@@ -288,6 +302,7 @@ func RegisterTools(s *mcp.Server, d Deps, passphrase string) {
 		})
 
 	mcp.AddTool(s, &mcp.Tool{Name: "name_foods",
+		Annotations: annAdd(),
 		Description: "Record English names for Indonesian foods, and get the next batch that still needs naming. Call it with no entries to fetch work, then call it again with the names you worked out; repeat until remaining reaches zero. Send an EMPTY name_en for foods with no English equivalent such as oncom or gembus — that is a real answer and stops them being asked about again; do NOT invent a literal translation. Returns how many were saved, any codes that do not exist, and the next batch, so you can work through the table without holding all 1,142 foods at once."},
 		func(ctx context.Context, r *mcp.CallToolRequest, a NameFoodsArgs) (*mcp.CallToolResult, NameFoodsOut, error) {
 			out, err := NameFoods(d, a)
@@ -298,6 +313,7 @@ func RegisterTools(s *mcp.Server, d Deps, passphrase string) {
 		})
 
 	mcp.AddTool(s, &mcp.Tool{Name: "log_food",
+		Annotations: annAdd(),
 		Description: "Record something eaten, scaling the table's per-100g values to the portion given in grams. Call this when someone says what they ate; pass a TKPI code from find_foods when the name is not unique. Do NOT invent a food or a portion — an unrecognised name is refused rather than guessed, and an ambiguous one comes back with the candidate codes for you to choose from. Returns the saved entry with its macros and provenance; an identical entry already logged today is treated as a retry and NOT logged twice unless allow_duplicate is set."},
 		func(ctx context.Context, r *mcp.CallToolRequest, a LogFoodArgs) (*mcp.CallToolResult, LogFoodOut, error) {
 			out, err := LogFood(d, a)
@@ -308,6 +324,7 @@ func RegisterTools(s *mcp.Server, d Deps, passphrase string) {
 		})
 
 	mcp.AddTool(s, &mcp.Tool{Name: "log_weight",
+		Annotations: annAdd(),
 		Description: "Record body weight and report the weekly trend. Day-to-day movement is water, not fat; only the weekly rate is signal."},
 		func(ctx context.Context, r *mcp.CallToolRequest, a LogWeightArgs) (*mcp.CallToolResult, map[string]any, error) {
 			if err := d.DB.LogWeight(a.Profile, storage.WeightEntry{Date: today(),
@@ -333,6 +350,7 @@ func RegisterTools(s *mcp.Server, d Deps, passphrase string) {
 		})
 
 	mcp.AddTool(s, &mcp.Tool{Name: "progress",
+		Annotations: annRead(),
 		Description: "Training, cardio, food and weight over N days. Reads the logs and invents nothing — absent data reports as absent."},
 		func(ctx context.Context, r *mcp.CallToolRequest, a ProgressArgs) (*mcp.CallToolResult, ProgressOut, error) {
 			if a.Days == 0 {
@@ -360,4 +378,28 @@ func Serve(addr string, d Deps, passphrase string) error {
 		w.Write([]byte(`{"status":"ok"}`))
 	})
 	return http.ListenAndServe(addr, mux)
+}
+
+// Annotation defaults in the spec are PESSIMISTIC: an unannotated tool is assumed
+// non-read-only, destructive, non-idempotent and open-world. Leaving the read tools
+// unannotated therefore advertises them as dangerous, which costs real capability — some
+// clients parallelise read-only tools and relax approval prompts for them.
+//
+// Every tool here is closed-world: the server touches only its own store.
+func annRead() *mcp.ToolAnnotations {
+	f := false
+	return &mcp.ToolAnnotations{ReadOnlyHint: true, IdempotentHint: true, OpenWorldHint: &f}
+}
+
+// annAdd marks a tool that only ever ADDS. put_document qualifies because it writes a new
+// version and leaves every earlier one readable — versioning is what earns the claim.
+func annAdd() *mcp.ToolAnnotations {
+	f := false
+	return &mcp.ToolAnnotations{DestructiveHint: &f, OpenWorldHint: &f}
+}
+
+// annOverwrite marks a tool that replaces existing values in place.
+func annOverwrite() *mcp.ToolAnnotations {
+	t, f := true, false
+	return &mcp.ToolAnnotations{DestructiveHint: &t, IdempotentHint: true, OpenWorldHint: &f}
 }

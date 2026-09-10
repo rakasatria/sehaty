@@ -89,7 +89,7 @@ func PlanSession(d Deps, profileID, focus string, minutes int) (PlanOut, error) 
 	if !ok {
 		return PlanOut{}, fmt.Errorf("focus must be full, upper or lower; got %q", focus)
 	}
-	p, err := d.DB.GetProfile(profileID)
+	p, err := requireProfile(d, profileID)
 	if err != nil {
 		return PlanOut{}, err
 	}
@@ -153,7 +153,7 @@ type LogOut struct {
 }
 
 func LogSet(d Deps, profileID, exercise string, sets, reps int, weightKg float64) (LogOut, error) {
-	p, err := d.DB.GetProfile(profileID)
+	p, err := requireProfile(d, profileID)
 	if err != nil {
 		return LogOut{}, err
 	}
@@ -200,7 +200,7 @@ type ProgressOut struct {
 }
 
 func Progress(d Deps, profileID string, days int) (ProgressOut, error) {
-	p, err := d.DB.GetProfile(profileID)
+	p, err := requireProfile(d, profileID)
 	if err != nil {
 		return ProgressOut{}, err
 	}
@@ -241,7 +241,7 @@ func Progress(d Deps, profileID string, days int) (ProgressOut, error) {
 }
 
 func FindExercises(d Deps, profileID, muscle string, limit int) ([]catalog.Exercise, error) {
-	p, err := d.DB.GetProfile(profileID)
+	p, err := requireProfile(d, profileID)
 	if err != nil {
 		return nil, err
 	}
@@ -276,7 +276,7 @@ func Register(d Deps, channel, externalID, profileID, passphrase, want string) (
 	if !storage.ValidID(profileID) {
 		return "", fmt.Errorf("profile id must be lowercase letters, digits, - or _")
 	}
-	if _, err := d.DB.GetProfile(profileID); err != nil {
+	if _, err := requireProfile(d, profileID); err != nil {
 		if err := d.DB.SaveProfile(storage.Profile{ID: profileID,
 			Equipment: []string{"body weight"}, Goal: "general", SessionsPerWeek: 3,
 			SessionMinutes: 50, Experience: "beginner", MaxDifficulty: 3,
@@ -308,7 +308,7 @@ var nonCatalogEquipment = map[string]bool{"treadmill": true}
 // session length. Registration deliberately creates a minimal profile, so without this
 // tool a person is stuck as a body-weight beginner forever.
 func UpdateProfile(d Deps, a UpdateProfileArgs) (storage.Profile, error) {
-	p, err := d.DB.GetProfile(a.Profile)
+	p, err := requireProfile(d, a.Profile)
 	if err != nil {
 		return p, err
 	}
@@ -392,4 +392,33 @@ func UpdateProfile(d Deps, a UpdateProfileArgs) (storage.Profile, error) {
 func Available(d Deps, p storage.Profile) int {
 	usable, _ := guardrails.Filter(p.Limitations, d.Cat.For(p.Equipment, p.MaxDifficulty))
 	return len(usable)
+}
+
+// requireProfile resolves a profile and, when it does not exist, says which ones do.
+//
+// The profile argument is a PRIVACY BOUNDARY between different people's health data, and
+// it arrives as a string chosen by a language model. A model can typo it or carry a stale
+// one from earlier in a conversation. An opaque failure invites a retry with the same bad
+// value; naming the registered profiles turns it into a one-step self-correction.
+//
+// This is a guard, not authentication — the server has none, so anything that can reach
+// the port can name any profile. See docs/design for that gap.
+func requireProfile(d Deps, id string) (storage.Profile, error) {
+	p, err := d.DB.GetProfile(id)
+	if err == nil {
+		return p, nil
+	}
+	if !errors.Is(err, storage.ErrNoProfile) {
+		return p, err
+	}
+	all, lerr := d.DB.ListProfiles()
+	if lerr != nil || len(all) == 0 {
+		return p, fmt.Errorf("unknown profile %q; none are registered yet — use register first", id)
+	}
+	names := make([]string, 0, len(all))
+	for _, x := range all {
+		names = append(names, x.ID)
+	}
+	return p, fmt.Errorf("unknown profile %q; registered profiles are: %s",
+		id, strings.Join(names, ", "))
 }

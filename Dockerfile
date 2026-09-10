@@ -23,8 +23,9 @@ COPY --from=build /out/sehaty /sehaty
 # refuses to start if the key file is found inside SEHATY_DATA, because a key in the
 # same volume as its ciphertext makes the encryption decoration.
 #
-# The exercise dataset is a submodule and is NOT redistributed — its licence is
-# NOASSERTION. Bind-mount it read-only at the path below.
+# The exercise dataset is a git submodule (MIT, Hasan Emir Yildirim). It may be
+# redistributed with attribution, but is kept out of the image to keep it small.
+# Bind-mount it read-only at the path below.
 ENV SEHATY_DATA=/data \
     SEHATY_EXERCISES=/opt/sehaty/exercises.json \
     SEHATY_MCP_HOST=0.0.0.0 \

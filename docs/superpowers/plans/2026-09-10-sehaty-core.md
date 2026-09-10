@@ -1494,7 +1494,7 @@ func main() {
 	}
 	defer db.Close()
 
-	exPath := env("SEHATY_EXERCISES", "vendor/exercises-dataset/data/exercises.json")
+	exPath := env("SEHATY_EXERCISES", "third_party/exercises-dataset/data/exercises.json")
 	cat, err := catalog.Load(exPath)
 	if err != nil {
 		log.Fatalf("load catalog: %v", err)

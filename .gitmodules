@@ -1,0 +1,3 @@
+[submodule "third_party/exercises-dataset"]
+	path = third_party/exercises-dataset
+	url = https://github.com/hasaneyldrm/exercises-dataset.git

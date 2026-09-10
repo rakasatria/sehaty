@@ -160,7 +160,7 @@ func RegisterTools(s *mcp.Server, d Deps, passphrase string) {
 				"max_difficulty":      p.MaxDifficulty,
 				"sessions_per_week":   p.SessionsPerWeek,
 				"session_minutes":     p.SessionMinutes,
-				"available_exercises": len(d.Cat.For(p.Equipment, p.MaxDifficulty))})
+				"available_exercises": Available(d, p)})
 		})
 
 	mcp.AddTool(s, &mcp.Tool{Name: "register",

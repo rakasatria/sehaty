@@ -780,3 +780,34 @@ button {
   color: var(--hint);
   max-width: 34em;
 }
+
+.locked {
+  margin-top: 2rem;
+}
+.locked-item {
+  border-top: 1px solid var(--rule);
+  padding-top: 0.75rem;
+  margin-top: 0.75rem;
+}
+.locked-item h3 {
+  font: inherit;
+  font-weight: 600;
+  margin: 0 0 0.4rem;
+}
+.locked-item ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+.locked-item li {
+  display: grid;
+  gap: 0.15rem;
+}
+.locked-item b {
+  font-weight: 600;
+}
+.locked-item span {
+  color: var(--hint);
+}

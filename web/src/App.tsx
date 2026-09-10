@@ -6,6 +6,7 @@ import { haptic, inTelegram, tg } from './lib/telegram'
 import { SummaryView } from './components/Summary'
 import { DayView } from './components/DayView'
 import { LogView } from './components/LogView'
+import { Locked } from './components/Locked'
 
 type Route = { v: 'summary' } | { v: 'log' } | { v: 'day'; date: string }
 
@@ -139,6 +140,7 @@ export default function App() {
           }}
         />
       )}
+      {route.v === 'summary' && <Locked items={summary.locked} />}
       {route.v === 'day' && (
         <DayView date={route.date} entries={summary.recent} onBack={goBack} showBackLink={!inTelegram} />
       )}

@@ -33,6 +33,7 @@ export type Summary = {
   }
   recent: RecentEntry[]
   limitations: string[] // injuries on record, pre-humanised
+  locked: LockedCapability[] // empty when nothing is gated; never null
 }
 
 export type SeriesPoint = {
@@ -46,4 +47,18 @@ export type RecentEntry = {
   date: string // pre-humanised, e.g. "Kam 10 Sep"
   what: string // e.g. "Latihan beban"
   detail: string // e.g. "Upper A — 16 set · 42 menit"
+}
+
+/**
+ * Something the record cannot do yet. Both strings arrive ready to render — the
+ * client picks neither the wording nor which needs to show.
+ */
+export type LockedCapability = {
+  unlocks: string
+  needs: LockedNeed[]
+}
+
+export type LockedNeed = {
+  field: string
+  because: string
 }

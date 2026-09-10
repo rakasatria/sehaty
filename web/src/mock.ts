@@ -184,6 +184,7 @@ function summaryFor(windowDays: WindowDays): Summary {
     },
     recent: recentFor(days),
     limitations: ['Lutut kanan — hindari gerakan melompat (Feb 2026)', 'Punggung bawah — beban deadlift dibatasi'],
+    locked: [],
   }
 }
 
@@ -205,5 +206,6 @@ export function emptySummary(windowDays: WindowDays): Summary {
     food: { daysLogged: null, kcal: null, protein: null },
     recent: [],
     limitations: [],
+    locked: [],
   }
 }

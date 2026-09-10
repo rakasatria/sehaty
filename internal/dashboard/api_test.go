@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/rakasatria/sehaty/internal/dashlink"
+	"github.com/rakasatria/sehaty/internal/storage"
 )
 
 // The API is the only thing that hands out a record, so it is the only thing
@@ -175,3 +176,58 @@ func TestDatesAreHumanisedAndStable(t *testing.T) {
 // errRefused stands in for whatever the real verifier returns; the API must not
 // care which failure it was.
 var errRefused = errors.New("refused")
+
+// The third reader of the capability registry. A person looking at their own record
+// should be able to see what it cannot do yet and exactly why — not discover it by
+// asking for something and being refused.
+func TestTheSummaryReportsWhatIsLockedAndWhy(t *testing.T) {
+	d, _ := setup(t)
+	// Create a bare profile with no age/height/sex/weight — everything is locked.
+	id, _ := storage.NewProfileID()
+	if err := d.DB.SaveProfile(storage.Profile{ID: id, DisplayName: "Someone"}); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := buildSummary(d, id, 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Locked) != 1 {
+		t.Fatalf("locked = %d entries, want 1", len(got.Locked))
+	}
+	if got.Locked[0].Unlocks == "" {
+		t.Error("the locked entry does not say what it would unlock")
+	}
+	if len(got.Locked[0].Needs) != 4 {
+		t.Fatalf("locked on %d needs, want 4", len(got.Locked[0].Needs))
+	}
+	for _, n := range got.Locked[0].Needs {
+		if n.Field == "" || n.Because == "" {
+			t.Errorf("a lock with no field or no reason: %+v", n)
+		}
+	}
+}
+
+// Once every hard requirement is met, nothing is locked and the section disappears
+// rather than rendering an empty box.
+func TestNothingIsLockedOnceTheInputsExist(t *testing.T) {
+	d, _ := setup(t)
+	id, _ := storage.NewProfileID()
+	if err := d.DB.SaveProfile(storage.Profile{
+		ID: id, DisplayName: "Someone", Age: 34, HeightCm: 173, Sex: "male",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.DB.LogWeight(id, storage.WeightEntry{
+		Date: time.Now().Format("2006-01-02"), WeightKg: 72.3}); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := buildSummary(d, id, 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Locked) != 0 {
+		t.Errorf("still locked with every input on file: %+v", got.Locked)
+	}
+}

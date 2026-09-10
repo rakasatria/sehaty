@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/rakasatria/sehaty/internal/capability"
 	"github.com/rakasatria/sehaty/internal/storage"
 )
 
@@ -19,15 +20,16 @@ import (
 // coordinates are normalised 0..1 with y measured downward, because the client
 // places points and must never derive one.
 type summary struct {
-	Name      string      `json:"name"`
-	Goal      string      `json:"goal"`
-	Equipment []string    `json:"equipment"`
-	Window    windowInfo  `json:"window"`
-	Weight    weightBlock `json:"weight"`
-	Training  training    `json:"training"`
-	Food      food        `json:"food"`
-	Recent    []entry     `json:"recent"`
-	Limits    []string    `json:"limitations"`
+	Name      string             `json:"name"`
+	Goal      string             `json:"goal"`
+	Equipment []string           `json:"equipment"`
+	Window    windowInfo         `json:"window"`
+	Weight    weightBlock        `json:"weight"`
+	Training  training           `json:"training"`
+	Food      food               `json:"food"`
+	Recent    []entry            `json:"recent"`
+	Limits    []string           `json:"limitations"`
+	Locked    []lockedCapability `json:"locked"`
 }
 
 type windowInfo struct {
@@ -70,6 +72,21 @@ type entry struct {
 	Date   string `json:"date"`
 	What   string `json:"what"`
 	Detail string `json:"detail"`
+}
+
+// lockedCapability is something this record cannot do yet, and why.
+//
+// Shown rather than discovered: finding out by asking and being refused reads as the
+// software being broken, while a named gap with a named reason reads as a record that
+// knows what it is short of.
+type lockedCapability struct {
+	Unlocks string       `json:"unlocks"`
+	Needs   []lockedNeed `json:"needs"`
+}
+
+type lockedNeed struct {
+	Field   string `json:"field"`
+	Because string `json:"because"`
 }
 
 // nz returns a pointer only when something was actually recorded. A zero count
@@ -137,6 +154,7 @@ func buildSummary(d Deps, profileID string, days int) (summary, error) {
 		Window:    windowInfo{Days: days, Label: fmt.Sprintf("%d hari terakhir", days)},
 		Recent:    []entry{},
 		Limits:    nonNil(p.Limitations),
+		Locked:    []lockedCapability{},
 		Weight:    weightBlock{Series: []point{}},
 	}
 
@@ -227,6 +245,21 @@ func buildSummary(d Deps, profileID string, days int) (summary, error) {
 	sort.SliceStable(out.Recent, func(i, j int) bool { return i > j })
 	if len(out.Recent) > 40 {
 		out.Recent = out.Recent[:40]
+	}
+	// The same registry the tools refuse from and the brief asks from. Three readers,
+	// one declaration — a lock the person is shown cannot disagree with a refusal they
+	// would get, because both are the same fact.
+	weighed := false
+	if ws, err := d.DB.Weights(profileID, 3650); err == nil && len(ws) > 0 {
+		weighed = true
+	}
+	for _, c := range capability.Locked(p.Have(weighed)) {
+		lc := lockedCapability{Unlocks: c.Unlocks}
+		for _, n := range c.Needs {
+			lc.Needs = append(lc.Needs, lockedNeed{
+				Field: string(n.Field), Because: n.Because})
+		}
+		out.Locked = append(out.Locked, lc)
 	}
 	return out, nil
 }

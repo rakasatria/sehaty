@@ -39,10 +39,11 @@ func open() (*storage.DB, error) {
 }
 
 func main() {
-	confirm := flag.Bool("yes-really-delete", false,
-		"required for delete-profile; without it nothing is removed")
-	flag.Parse()
-	args := flag.Args()
+	// Flags are parsed PER SUBCOMMAND. Go's top-level flag.Parse stops at the first
+	// positional argument, so "delete-profile raka --yes-really-delete" left the flag
+	// unparsed and the command silently did nothing while appearing to accept it —
+	// the worst possible failure mode for a delete tool.
+	args := os.Args[1:]
 	if len(args) == 0 {
 		fmt.Fprintln(os.Stderr, "usage: sehatyctl profiles | delete-profile <id> --yes-really-delete")
 		os.Exit(2)
@@ -68,10 +69,16 @@ func main() {
 		fmt.Printf("%d profile(s)\n", len(ps))
 
 	case "delete-profile":
-		if len(args) < 2 {
-			fail(fmt.Errorf("delete-profile needs a profile id"))
+		fs := flag.NewFlagSet("delete-profile", flag.ExitOnError)
+		confirm := fs.Bool("yes-really-delete", false,
+			"actually delete; without it nothing is removed")
+		if err := fs.Parse(args[1:]); err != nil {
+			fail(err)
 		}
-		id := args[1]
+		if fs.NArg() < 1 {
+			fail(fmt.Errorf("usage: sehatyctl delete-profile <id> [--yes-really-delete]"))
+		}
+		id := fs.Arg(0)
 		p, err := db.GetProfile(id)
 		if err != nil {
 			fail(err)

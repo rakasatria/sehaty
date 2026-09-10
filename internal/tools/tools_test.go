@@ -117,15 +117,15 @@ func TestProgressDistinguishesNoDataFromZero(t *testing.T) {
 		t.Fatalf("reported a latest weight of %v with no weigh-ins recorded", *p.LatestWeightKg)
 	}
 
-	if err := d.DB.LogWeight("raka", storage.WeightEntry{Date: today(), WeightKg: 87.4}); err != nil {
+	if err := d.DB.LogWeight("raka", storage.WeightEntry{Date: today(), WeightKg: 72.3}); err != nil {
 		t.Fatal(err)
 	}
 	p, err = Progress(d, "raka", 14)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p.LatestWeightKg == nil || *p.LatestWeightKg != 87.4 {
-		t.Fatalf("after logging 87.4, progress reported %v", p.LatestWeightKg)
+	if p.LatestWeightKg == nil || *p.LatestWeightKg != 72.3 {
+		t.Fatalf("after logging 72.3, progress reported %v", p.LatestWeightKg)
 	}
 }
 

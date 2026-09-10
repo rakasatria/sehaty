@@ -11,9 +11,9 @@ import (
 // collapse. Health data plotted without headroom is alarming by accident.
 func TestSeriesPadsTheScaleAwayFromTheData(t *testing.T) {
 	dates := []string{"2026-09-01", "2026-09-05", "2026-09-10"}
-	vals := []float64{87.4, 86.9, 86.2}
+	vals := []float64{72.3, 86.9, 86.2}
 	s := buildSeries(dates, vals, 1)
-	if s.Min >= 86.2 || s.Max <= 87.4 {
+	if s.Min >= 86.2 || s.Max <= 72.3 {
 		t.Fatalf("scale %v..%v does not contain the data with headroom", s.Min, s.Max)
 	}
 	// No point may sit on the very edge of the box.
@@ -38,7 +38,7 @@ func TestFlatSeriesStillPlots(t *testing.T) {
 }
 
 func TestSingleObservationPlotsWithoutBlowingUp(t *testing.T) {
-	s := buildSeries([]string{"2026-09-10"}, []float64{87.4}, 1)
+	s := buildSeries([]string{"2026-09-10"}, []float64{72.3}, 1)
 	if len(s.Points) != 1 || math.IsNaN(s.Points[0].X) {
 		t.Fatalf("single point: %+v", s.Points)
 	}

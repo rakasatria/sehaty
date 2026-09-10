@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/rakasatria/sehaty/internal/crypto"
 	"github.com/rakasatria/sehaty/internal/media"
 )
 
@@ -193,14 +192,13 @@ func ListMedia(d Deps, a ListMediaArgs) (ListMediaOut, error) {
 	return out, nil
 }
 
-// cryptoMedia builds the media cipher from the environment. Exposed for tests; the server
-// builds it in main and passes the store in.
-func cryptoMedia() (*crypto.Cipher, error) {
-	key, err := crypto.ReadKeyEnv()
-	if err != nil {
-		// Tests run without a configured key; a fixed one is fine because the store they
-		// build lives in a temp directory that is deleted when the test ends.
-		return crypto.NewMedia("MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
-	}
-	return crypto.NewMedia(key)
-}
+// The media cipher is built in main from the master key and the store is passed in.
+//
+// There used to be a cryptoMedia() helper here that fell back to a FIXED key when the
+// real one could not be read. It was only ever called from a test, but it sat in
+// production code carrying a key that this repository publishes, behind a path that
+// fails OPEN: any error reading the real key and media would be encrypted with a
+// secret anybody can read on GitHub, silently and with no warning. For a health
+// record's photos that is the wrong direction to fail, and the next person to wire it
+// into a live path would have had no reason to look. It lives in the test file now,
+// which is the only place that ever wanted it.

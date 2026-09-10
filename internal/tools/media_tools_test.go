@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/rakasatria/sehaty/internal/crypto"
 	"github.com/rakasatria/sehaty/internal/media"
 )
 
@@ -193,4 +194,14 @@ func TestLogFoodDuplicateStillReportsThePhoto(t *testing.T) {
 	if again.Photo != att.Hash {
 		t.Errorf("duplicate reply omitted the photo: %q", again.Photo)
 	}
+}
+
+// cryptoMedia builds a media cipher for tests.
+//
+// The key is fixed and public, which is fine HERE and nowhere else: the store these
+// tests build lives in a temp directory that is deleted when the test ends, and
+// nothing real is ever encrypted with it. Keeping it in the test file means the
+// shipped binary contains no key at all, and no path that quietly substitutes one.
+func cryptoMedia() (*crypto.Cipher, error) {
+	return crypto.NewMedia("MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
 }

@@ -27,7 +27,7 @@ func setup(t *testing.T) (Deps, string) {
 		Goal: "fat_loss", Equipment: []string{"body weight", "dumbbell"}}); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.LogWeight(id, storage.WeightEntry{Date: "2026-09-10", WeightKg: 87.4}); err != nil {
+	if err := db.LogWeight(id, storage.WeightEntry{Date: "2026-09-10", WeightKg: 72.3}); err != nil {
 		t.Fatal(err)
 	}
 	if err := db.LogSet(id, storage.SetEntry{Date: "2026-09-10", Exercise: "push-up",
@@ -58,7 +58,7 @@ func TestValidLinkOpensTheAppAndCarriesNoRecord(t *testing.T) {
 	if !strings.Contains(body, "/app/assets/") {
 		t.Error("a valid link did not serve the application")
 	}
-	for _, leak := range []string{"Raka", "87.4", "push-up", "fat_loss"} {
+	for _, leak := range []string{"Raka", "72.3", "push-up", "fat_loss"} {
 		if strings.Contains(body, leak) {
 			t.Errorf("the shell carries %q before anything was verified", leak)
 		}

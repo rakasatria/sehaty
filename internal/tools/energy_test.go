@@ -10,9 +10,9 @@ import (
 // The equation, checked by hand against the paper.
 //
 // Mifflin-St Jeor: BMR = 10W + 6.25H − 5A + s, where s is +5 for men and −161 for
-// women. For a 34-year-old man, 173 cm, 87.4 kg:
+// women. For a 34-year-old man, 173 cm, 72.3 kg:
 //
-//	10(87.4) + 6.25(173) − 5(34) + 5 = 874 + 1081.25 − 170 + 5 = 1790.25 → 1790
+//	10(72.3) + 6.25(173) − 5(34) + 5 = 723 + 1081.25 − 170 + 5 = 1639.25 → 1639
 //
 // Worked out longhand precisely because this is the one number in Sehaty a model
 // would otherwise have produced, and a wrong one is indistinguishable from a right
@@ -27,7 +27,7 @@ func TestTheEquationIsTheEquation(t *testing.T) {
 		Age: 34, HeightCm: 173, Sex: "male", SessionsPerWeek: 4}); err != nil {
 		t.Fatal(err)
 	}
-	if err := d.DB.LogWeight(p.ID, storage.WeightEntry{Date: "2026-09-10", WeightKg: 87.4}); err != nil {
+	if err := d.DB.LogWeight(p.ID, storage.WeightEntry{Date: "2026-09-10", WeightKg: 72.3}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -35,15 +35,15 @@ func TestTheEquationIsTheEquation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.BMR != 1790 {
-		t.Errorf("BMR = %d, want 1790 (10·87.4 + 6.25·173 − 5·34 + 5)", got.BMR)
+	if got.BMR != 1639 {
+		t.Errorf("BMR = %d, want 1639 (10·72.3 + 6.25·173 − 5·34 + 5)", got.BMR)
 	}
 	// Four sessions a week is "moderately active", ×1.55.
 	if got.Activity != 1.55 {
 		t.Errorf("activity factor = %v, want 1.55", got.Activity)
 	}
-	if want := 2775; got.TDEE != want {
-		t.Errorf("maintenance = %d, want %d (1790.25 × 1.55)", got.TDEE, want)
+	if want := 2541; got.TDEE != want {
+		t.Errorf("maintenance = %d, want %d (1639.25 × 1.55)", got.TDEE, want)
 	}
 	// A range, never a single figure.
 	if got.LowKcal >= got.HighKcal {
@@ -53,8 +53,8 @@ func TestTheEquationIsTheEquation(t *testing.T) {
 		t.Error("maintenance falls outside its own range")
 	}
 	// 1.6 g/kg — the well-evidenced part of this.
-	if got.ProteinG != 140 {
-		t.Errorf("protein = %d g, want 140 (87.4 × 1.6)", got.ProteinG)
+	if got.ProteinG != 116 {
+		t.Errorf("protein = %d g, want 116 (72.3 × 1.6)", got.ProteinG)
 	}
 	if !strings.Contains(got.Caveat, "ESTIMATE") || !strings.Contains(got.Caveat, "dietitian") {
 		t.Error("the estimate travels without its caveat")
@@ -73,7 +73,7 @@ func TestTheSexCoefficientIsApplied(t *testing.T) {
 			Age: 34, HeightCm: 173, Sex: sex, SessionsPerWeek: 4}); err != nil {
 			t.Fatal(err)
 		}
-		if err := d.DB.LogWeight(p.ID, storage.WeightEntry{Date: "2026-09-10", WeightKg: 87.4}); err != nil {
+		if err := d.DB.LogWeight(p.ID, storage.WeightEntry{Date: "2026-09-10", WeightKg: 72.3}); err != nil {
 			t.Fatal(err)
 		}
 		got, err := EstimateEnergy(d, p.ID)
@@ -97,15 +97,15 @@ func TestItRefusesRatherThanAssumingAnyInput(t *testing.T) {
 	for name, setup := range map[string]func(string){
 		"no age at all": func(id string) {
 			_, _ = UpdateProfile(d, UpdateProfileArgs{Profile: id, HeightCm: 173, Sex: "male"})
-			_ = d.DB.LogWeight(id, storage.WeightEntry{Date: "2026-09-10", WeightKg: 87.4})
+			_ = d.DB.LogWeight(id, storage.WeightEntry{Date: "2026-09-10", WeightKg: 72.3})
 		},
 		"no height": func(id string) {
 			_, _ = UpdateProfile(d, UpdateProfileArgs{Profile: id, Age: 34, Sex: "male"})
-			_ = d.DB.LogWeight(id, storage.WeightEntry{Date: "2026-09-10", WeightKg: 87.4})
+			_ = d.DB.LogWeight(id, storage.WeightEntry{Date: "2026-09-10", WeightKg: 72.3})
 		},
 		"no sex": func(id string) {
 			_, _ = UpdateProfile(d, UpdateProfileArgs{Profile: id, Age: 34, HeightCm: 173})
-			_ = d.DB.LogWeight(id, storage.WeightEntry{Date: "2026-09-10", WeightKg: 87.4})
+			_ = d.DB.LogWeight(id, storage.WeightEntry{Date: "2026-09-10", WeightKg: 72.3})
 		},
 		"never weighed": func(id string) {
 			_, _ = UpdateProfile(d, UpdateProfileArgs{Profile: id, Age: 34, HeightCm: 173, Sex: "male"})

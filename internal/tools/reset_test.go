@@ -25,7 +25,7 @@ func TestResetClearsAnswersAndKeepsEveryLoggedThing(t *testing.T) {
 		Limitations: []string{"bahu kiri"}}); err != nil {
 		t.Fatal(err)
 	}
-	if err := d.DB.LogWeight(p.ID, storage.WeightEntry{Date: "2026-09-10", WeightKg: 87.4}); err != nil {
+	if err := d.DB.LogWeight(p.ID, storage.WeightEntry{Date: "2026-09-10", WeightKg: 72.3}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -64,7 +64,7 @@ func TestResetClearsAnswersAndKeepsEveryLoggedThing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if pr.LatestWeightKg == nil || *pr.LatestWeightKg != 87.4 {
+	if pr.LatestWeightKg == nil || *pr.LatestWeightKg != 72.3 {
 		t.Fatalf("the weight log did not survive the reset: %v", pr.LatestWeightKg)
 	}
 

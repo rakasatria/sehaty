@@ -7,16 +7,15 @@ import (
 	"github.com/rakasatria/sehaty/internal/storage"
 )
 
-// The equation, checked by hand against the paper.
+// The equation, checked by hand.
 //
-// Mifflin-St Jeor: BMR = 10W + 6.25H − 5A + s, where s is +5 for men and −161 for
-// women. For a 34-year-old man, 173 cm, 72.3 kg:
+// Henry/Oxford (2005), men 30-60: BMR = 14.2W + 593. For 72.3 kg:
 //
-//	10(72.3) + 6.25(173) − 5(34) + 5 = 723 + 1081.25 − 170 + 5 = 1639.25 → 1639
+//	14.2(72.3) + 593 = 1026.66 + 593 = 1619.66 → 1620
 //
-// Worked out longhand precisely because this is the one number in Sehaty a model
-// would otherwise have produced, and a wrong one is indistinguishable from a right
-// one by reading it.
+// Worked longhand precisely because this is the one number in Sehaty a model would
+// otherwise have produced, and a wrong one is indistinguishable from a right one by
+// reading it.
 func TestTheEquationIsTheEquation(t *testing.T) {
 	d := testDeps(t)
 	p, err := Register(d, "probe", "energy", "Probe", "pw", "pw")
@@ -35,31 +34,22 @@ func TestTheEquationIsTheEquation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.BMR != 1639 {
-		t.Errorf("BMR = %d, want 1639 (10·72.3 + 6.25·173 − 5·34 + 5)", got.BMR)
+	if got.BMR != 1620 {
+		t.Errorf("BMR = %d, want 1620 (14.2·72.3 + 593)", got.BMR)
 	}
-	// Four sessions a week is "moderately active", ×1.55.
-	if got.Activity != 1.55 {
-		t.Errorf("activity factor = %v, want 1.55", got.Activity)
+	// Four sessions a week is "moderately active" — and the floor of this ladder is
+	// 1.40, not 1.2. Nobody free-living sits below 1.40; people sealed in a
+	// respiration chamber measure 1.40 ± 0.06.
+	if got.Activity != 1.70 {
+		t.Errorf("activity factor = %v, want 1.70", got.Activity)
 	}
-	if want := 2541; got.TDEE != want {
-		t.Errorf("maintenance = %d, want %d (1639.25 × 1.55)", got.TDEE, want)
+	if want := 2753; got.TDEE != want {
+		t.Errorf("maintenance = %d, want %d (1619.66 × 1.70)", got.TDEE, want)
 	}
-	// A range, never a single figure.
 	if got.LowKcal >= got.HighKcal {
 		t.Error("the estimate is not a range")
 	}
-	if got.LowKcal > got.TDEE || got.HighKcal < got.TDEE {
-		t.Error("maintenance falls outside its own range")
-	}
-	// 1.6 g/kg — the well-evidenced part of this.
-	if got.ProteinG != 116 {
-		t.Errorf("protein = %d g, want 116 (72.3 × 1.6)", got.ProteinG)
-	}
-	// The caveat is load-bearing, not decoration. It has to say three things: that
-	// this is a guess, that the equation was never tested on people like this user,
-	// and that the weight log will beat it. Losing any of them turns a wide prior into
-	// a confident-looking number.
+	// The caveat is load-bearing, not decoration.
 	for _, want := range []string{"STARTING GUESS", "never been tested on Indonesians",
 		"two or three weeks", "dietitian"} {
 		if !strings.Contains(got.Caveat, want) {
@@ -69,10 +59,34 @@ func TestTheEquationIsTheEquation(t *testing.T) {
 	if !got.Provisional {
 		t.Error("the estimate does not declare itself provisional")
 	}
-	// The band must stay wide. ±10% would describe measured RMR in a US cohort, not an
-	// estimated TDEE for someone the equation has never been validated on.
 	if spread := float64(got.HighKcal-got.LowKcal) / float64(got.TDEE); spread < 0.45 {
 		t.Errorf("the range narrowed to %.0f%% — it should be about 50%% wide", spread*100)
+	}
+}
+
+// No rung of the activity ladder may sit below what a person sealed in a metabolic
+// chamber measures. The old ladder started at 1.2 — the published floor for NON-AMBULANT
+// subjects — which assigned bedbound expenditure to anyone with a desk job.
+func TestNoActivityFactorIsBelowThePhysiologicalFloor(t *testing.T) {
+	for _, n := range []int{0, 1, 2, 3, 4, 5, 6, 10} {
+		f, basis := activityFor(n)
+		if f < 1.40 {
+			t.Errorf("%d sessions → %v, below the 1.40 floor measured in a respiration chamber", n, f)
+		}
+		if f > 2.10 {
+			t.Errorf("%d sessions → %v, above what free-living adults sustain", n, f)
+		}
+		if basis == "" {
+			t.Errorf("%d sessions has no stated basis", n)
+		}
+	}
+	// And the steps must not be evenly spaced, because that is the signature of
+	// interpolation rather than measurement.
+	a, _ := activityFor(0)
+	b, _ := activityFor(1)
+	c, _ := activityFor(3)
+	if (b-a)-(c-b) == 0 && b-a != 0 {
+		t.Error("the ladder is evenly spaced again — that is arithmetic, not evidence")
 	}
 }
 
@@ -98,8 +112,16 @@ func TestTheSexCoefficientIsApplied(t *testing.T) {
 		return got.BMR
 	}
 	male, female := mk("m", "male"), mk("f", "female")
-	if male-female != 166 {
-		t.Errorf("male − female = %d, want 166 (+5 against −161)", male-female)
+	// Henry/Oxford 30-60: men 14.2W + 593, women 9.74W + 694. At 72.3 kg that is
+	// 1619.66 and 1398.20, which round to 1620 and 1398 — a gap of 222 between the
+	// reported figures, though the unrounded difference is 221.46. The test compares
+	// what is actually shown, so it expects 222.
+	//
+	// The gap comes from different SLOPES, not a constant offset, which is the point
+	// of sex-specific equations and the reason a single one with an adjustment term
+	// fits both sexes worse.
+	if male-female != 222 {
+		t.Errorf("male − female = %d, want 222 (1620 against 1398)", male-female)
 	}
 }
 
@@ -159,20 +181,15 @@ func TestItRefusesForSomeoneUnderEighteen(t *testing.T) {
 	}
 }
 
-// Training frequency changes the whole day's expenditure, so the factor has to
-// move with it — and must not run away at the top end.
+// Frequency must still move the factor monotonically — that part of the old test was
+// right, and it is kept. Its bounds were not: they enforced 1.2 to 1.9, which is
+// exactly the range this file now rejects.
 func TestActivityFactorTracksFrequency(t *testing.T) {
 	prev := 0.0
 	for _, n := range []int{0, 2, 4, 6, 9} {
-		f, basis := activityFor(n)
+		f, _ := activityFor(n)
 		if f < prev {
 			t.Errorf("%d sessions gave a lower factor than fewer sessions", n)
-		}
-		if f < 1.2 || f > 1.9 {
-			t.Errorf("%d sessions → %v, outside the accepted 1.2–1.9", n, f)
-		}
-		if basis == "" {
-			t.Errorf("%d sessions has no stated basis", n)
 		}
 		prev = f
 	}

@@ -56,21 +56,81 @@ type EnergyEstimate struct {
 // obvious.
 const maxDailyDeficit = 500.0
 
-// activityFor maps training frequency onto the standard multipliers. Someone who
-// trains four times a week and sits down the rest of the time is not "very
-// active"; the factor describes the whole day, not the hour in the gym.
+// activityFor maps training frequency onto a physical activity level.
+//
+// The familiar 1.2 / 1.375 / 1.55 / 1.725 / 1.9 ladder is not used here, and the reason is
+// that it is not a measurement of anything. Its steps are exactly equidistant to three
+// decimals — 0.175 apart, with 1.55 the exact midpoint — which no distribution of human
+// activity produces. It is linear interpolation between two borrowed anchors with no
+// traceable derivation.
+//
+// Worse, its floor is wrong by construction. 1.2 comes from a paper describing NON-AMBULANT
+// subjects: it is the lower limit of human daily energy expenditure, not a desk job. People
+// confined to a respiration chamber — physically unable to leave a sealed room — measure
+// 1.40 ± 0.06 and never fall below 1.30. Free-living adults average about 1.70 (women) and
+// 1.77 (men).
+//
+// This matters more than the equation it multiplies. Between-subject variation in PAL is
+// about 15% against 8.5% for an estimated BMR, so the activity factor contributes roughly
+// three quarters of the total error. One step here is worth more than the entire worst case
+// of the resting-rate estimate, which is why the steps are now grounded rather than evenly
+// spaced.
 func activityFor(sessionsPerWeek int) (float64, string) {
 	switch {
 	case sessionsPerWeek <= 0:
-		return 1.2, "sedentary — little or no training"
+		// The floor, not zero. Nobody free-living sits below this.
+		return 1.40, "sedentary — desk work, little training"
 	case sessionsPerWeek <= 2:
-		return 1.375, "lightly active — 1-2 sessions a week"
+		return 1.55, "lightly active — 1-2 sessions a week"
 	case sessionsPerWeek <= 4:
-		return 1.55, "moderately active — 3-4 sessions a week"
+		return 1.70, "moderately active — 3-4 sessions a week"
 	case sessionsPerWeek <= 6:
-		return 1.725, "very active — 5-6 sessions a week"
+		return 1.85, "very active — 5-6 sessions a week"
 	default:
-		return 1.9, "extremely active — daily training or physical work"
+		return 2.00, "extremely active — daily training or physical work"
+	}
+}
+
+// restingRate estimates resting energy expenditure, in kcal/day.
+//
+// Henry/Oxford (2005) rather than Mifflin-St Jeor, for a specific reason. Mifflin was
+// derived on 498 adults in Reno, Nevada, and its own authors wrote that "their clinical
+// utility can only be assessed by testing in other populations." The equations everyone
+// reaches for instead — FAO/WHO/UNU via Schofield — rest on a database that was 3,388 of
+// 7,173 subjects Italian, with 13% from the tropics, and overestimate tropical resting rates
+// by around 8%.
+//
+// Henry rebuilt that database on 10,552 measurements, excluded the Italians entirely, and
+// raised tropical representation to 38%. It is the only widely-used equation constructed to
+// remove precisely the bias that would otherwise apply here.
+//
+// It does not solve the problem. There is no published validation of ANY resting-rate
+// equation in healthy Indonesian adults — a genuine void rather than a search failure. And
+// the mechanism says a weight-and-height equation cannot close the gap: Indonesians carry
+// about 4.8 percentage points more body fat than Dutch adults at the same weight, height,
+// age and sex, so they carry less fat-free mass, which is what actually drives resting
+// expenditure. An equation that cannot see body composition inherits that difference.
+//
+// Even Henry's own standard error is about 156 kcal/day for young men. Two of those is
+// ±310 kcal — the irreducible floor for any weight-based equation, whichever one is chosen.
+func restingRate(weightKg float64, age int, sex string) (kcal float64, equation string) {
+	female := sex == "female"
+	switch {
+	case age < 30:
+		if female {
+			return 13.1*weightKg + 558, "Henry/Oxford (2005), women 18-30"
+		}
+		return 16.0*weightKg + 545, "Henry/Oxford (2005), men 18-30"
+	case age < 60:
+		if female {
+			return 9.74*weightKg + 694, "Henry/Oxford (2005), women 30-60"
+		}
+		return 14.2*weightKg + 593, "Henry/Oxford (2005), men 30-60"
+	default:
+		if female {
+			return 10.1*weightKg + 569, "Henry/Oxford (2005), women 60+"
+		}
+		return 13.5*weightKg + 514, "Henry/Oxford (2005), men 60+"
 	}
 }
 
@@ -112,17 +172,14 @@ func EstimateEnergy(d Deps, profileID string) (EnergyEstimate, error) {
 				"paediatric dietitian, not an equation")
 	}
 
-	// Mifflin-St Jeor, resting energy expenditure in kcal/day.
-	bmr := 10*weight + 6.25*float64(p.HeightCm) - 5*float64(p.Age)
-	switch p.Sex {
-	case "male":
-		bmr += 5
-	case "female":
-		bmr -= 161
-	default:
-		// No third-sex coefficient exists in the literature. The midpoint is
+	bmr, equation := restingRate(weight, p.Age, p.Sex)
+	if p.Sex == "other" {
+		// No third-sex coefficient exists in any of these equations. The midpoint is
 		// stated as what it is rather than quietly picking one of the two.
-		bmr -= 78
+		male, _ := restingRate(weight, p.Age, "male")
+		female, _ := restingRate(weight, p.Age, "female")
+		bmr = (male + female) / 2
+		equation += " — midpoint of the two published forms"
 	}
 
 	factor, basis := activityFor(p.SessionsPerWeek)
@@ -150,7 +207,7 @@ func EstimateEnergy(d Deps, profileID string) (EnergyEstimate, error) {
 		// cohorts, so there is no constant to correct by either.
 		LowKcal:     round(tdee * 0.75),
 		HighKcal:    round(tdee * 1.25),
-		Equation:    "Mifflin-St Jeor (1990), × activity factor — unvalidated for this population",
+		Equation:    equation + ", × activity factor — unvalidated for this population",
 		Provisional: true,
 		UsedWeigh:   fmt.Sprintf("%.1f kg", weight),
 		Caveat: "A STARTING GUESS, not a target and not a measurement. This equation was " +
@@ -190,10 +247,19 @@ func EstimateEnergy(d Deps, profileID string) (EnergyEstimate, error) {
 		out.GoalLow, out.GoalHigh = round(tdee), round(tdee*1.05)
 	}
 
-	// Protein, which is the part of this that is actually well evidenced: 1.6-2.2
-	// g/kg for someone training with resistance. The lower end of the range is
-	// used, since the upper end is where returns have flattened.
+	// Protein. 1.6 g/kg is the widely quoted figure and it is softer than its
+	// reputation: it is the point estimate of a meta-regression breakpoint that was
+	// NOT statistically significant (p = 0.079), with a confidence interval running
+	// 1.03 to 2.20, and the authors themselves wrote that it "may be prudent to
+	// recommend ~2.2 g/kg" for anyone trying to maximise.
+	//
+	// In a deficit the case for more is much stronger. At a 40% deficit, 2.4 g/kg
+	// gained 1.2 kg of lean mass where 1.2 g/kg gained 0.1 kg. So the figure rises
+	// when someone is cutting, which is exactly when lean mass is at risk.
 	out.ProteinG = round(weight * 1.6)
+	if p.Goal == "fat_loss" {
+		out.ProteinG = round(weight * 2.2)
+	}
 	return out, nil
 }
 

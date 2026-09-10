@@ -1,0 +1,31 @@
+# Reference deployment. The point of this file is the SECRET HANDLING, which is the
+# part people get wrong.
+services:
+  sehaty:
+    image: ghcr.io/rakasatria/sehaty:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8765:8765"     # MCP is a TOOL-EXECUTION surface — never publish it
+    volumes:
+      - sehaty-data:/data
+      - ./exercises.json:/data/exercises.json:ro
+    environment:
+      # A key passed as an environment variable is NOT a secret: it is visible in
+      # `docker inspect`, in `ps` on the host, and in most logging. Point at a file.
+      SEHATY_KEY_FILE: /run/secrets/sehaty_key
+      OPENROUTER_API_KEY_FILE: /run/secrets/openrouter_key
+    secrets:
+      - sehaty_key
+      - openrouter_key
+
+secrets:
+  # Swarm mounts these on tmpfs, so they never touch the container's disk and a volume
+  # backup cannot contain them. That separation is the entire reason to bother: if the
+  # key travels with the ciphertext, encrypting the volume protects nothing.
+  sehaty_key:
+    file: ./secrets/sehaty_key
+  openrouter_key:
+    file: ./secrets/openrouter_key
+
+volumes:
+  sehaty-data:

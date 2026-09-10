@@ -172,10 +172,14 @@ func LogFood(d Deps, a LogFoodArgs) (LogFoodOut, error) {
 		if dup, err := dedupeWindow(d, a.Profile, date, a.Meal, item, a.Grams); err != nil {
 			return LogFoodOut{}, err
 		} else if dup != nil {
+			// Echo the photo too: a caller must get the same response SHAPE whether the
+			// entry was just created or already existed, or it cannot tell from the
+			// reply whether its photo made it onto the meal.
 			return LogFoodOut{Status: "duplicate", Profile: a.Profile, Date: dup.Date,
 				Meal: dup.Meal, Item: dup.Item, Grams: dup.Grams, Kcal: dup.Kcal,
 				ProteinG: dup.ProteinG, CarbsG: dup.CarbsG, FatG: dup.FatG,
-				Source: dup.Source, SourceCitation: f.SourceCitation, Flags: f.Flags(),
+				Source: dup.Source, Photo: dup.PhotoHash,
+				SourceCitation: f.SourceCitation, Flags: f.Flags(),
 				Note: "Already logged today — treated as a repeat of the same entry, not " +
 					"logged again. Pass allow_duplicate if it really was eaten twice."}, nil
 		}

@@ -169,3 +169,28 @@ func TestSniffMIMEUsesTheBytesNotTheKind(t *testing.T) {
 		t.Errorf("empty input sniffed as %q", got)
 	}
 }
+
+// A retry must return the same response shape as the original, including the photo —
+// otherwise the caller cannot tell from the reply whether its photo reached the meal.
+func TestLogFoodDuplicateStillReportsThePhoto(t *testing.T) {
+	d, id := mediaDeps(t)
+	att, err := AttachMedia(d, AttachMediaArgs{Profile: id, Data: b64("a meal photo")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	args := LogFoodArgs{Profile: id, Food: "AR001", Grams: 150, Meal: "makan siang",
+		Photo: att.Hash}
+	if _, err := LogFood(d, args); err != nil {
+		t.Fatal(err)
+	}
+	again, err := LogFood(d, args)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again.Status != "duplicate" {
+		t.Fatalf("status = %q", again.Status)
+	}
+	if again.Photo != att.Hash {
+		t.Errorf("duplicate reply omitted the photo: %q", again.Photo)
+	}
+}

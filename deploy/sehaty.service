@@ -43,6 +43,10 @@ Environment=SEHATY_KEY_FILE=/etc/sehaty/key
 Environment=SEHATY_DATA=/var/lib/sehaty
 Environment=SEHATY_EXERCISES=/opt/sehaty/exercises.json
 Environment=SEHATY_FOODS=/opt/sehaty/tkpi-2020.json
+# Transcription is the ONLY thing that sends data off this machine. Omit the key
+# and voice notes are still stored and playable, just never read.
+Environment=SEHATY_OPENROUTER_KEY_FILE=/etc/sehaty/openrouter.key
+Environment=SEHATY_TRANSCRIBE_MODEL=google/gemini-2.5-flash-lite
 # /etc/sehaty/gocryptfs.pw (0400) unlocks media.enc and lives outside SEHATY_DATA for
 # the same reason the master key does.
 Environment=SEHATY_MCP_HOST=127.0.0.1

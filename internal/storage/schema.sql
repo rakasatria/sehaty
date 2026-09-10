@@ -125,3 +125,17 @@ CREATE TABLE IF NOT EXISTS api_token (
   revoked_at  TEXT
 );
 CREATE INDEX IF NOT EXISTS api_token_hash ON api_token(token_hash);
+
+-- What a voice note said. Kept apart from the recording so the audio stays encrypted on
+-- disk while the text becomes searchable. source records WHO produced it: a machine
+-- transcription is a guess about what was said, a user correction is what was said, and
+-- confusing the two would let a guess harden into a record.
+CREATE TABLE IF NOT EXISTS media_transcript (
+  profile_id TEXT NOT NULL REFERENCES profile(id),
+  hash       TEXT NOT NULL,
+  text       TEXT NOT NULL,
+  source     TEXT NOT NULL DEFAULT '',
+  language   TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (profile_id, hash)
+);

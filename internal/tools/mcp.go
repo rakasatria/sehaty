@@ -264,6 +264,17 @@ func RegisterTools(s *mcp.Server, d Deps, passphrase string) {
 			return nil, out, nil
 		})
 
+	mcp.AddTool(s, &mcp.Tool{Name: "transcribe_voice",
+		Annotations: annAdd(),
+		Description: "Read a stored voice note and return what was said. Call it when someone sends a spoken note instead of typing. Do NOT treat the result as a verbatim record — it was heard by a model, not written by the person, so confirm anything before logging it as fact. Returns the text in its original language, cached after the first call because transcription is the one thing that sends data off this machine."},
+		func(ctx context.Context, r *mcp.CallToolRequest, a TranscribeArgs) (*mcp.CallToolResult, TranscribeOut, error) {
+			out, err := TranscribeVoice(d, a)
+			if err != nil {
+				return nil, TranscribeOut{}, err
+			}
+			return nil, out, nil
+		})
+
 	mcp.AddTool(s, &mcp.Tool{Name: "list_media",
 		Annotations: annRead(),
 		Description: "List the photos or voice notes stored for one profile, newest first. Call this to find a hash when someone refers to a picture they sent earlier. Does NOT return the files themselves, only their hashes and sizes. Returns nothing for another person's profile — media is scoped per profile and a hash alone will not open it."},

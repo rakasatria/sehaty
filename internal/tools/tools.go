@@ -19,6 +19,7 @@ import (
 	"github.com/rakasatria/sehaty/internal/guardrails"
 	"github.com/rakasatria/sehaty/internal/media"
 	"github.com/rakasatria/sehaty/internal/storage"
+	"github.com/rakasatria/sehaty/internal/transcribe"
 )
 
 func today() string { return time.Now().Format("2006-01-02") }
@@ -33,6 +34,10 @@ type Deps struct {
 	Food     *food.Table    // Indonesian food composition (TKPI 2020)
 	DashKey  []byte         // signs time-limited dashboard links
 	DashBase string         // public base URL of the dashboard
+
+	// Transcriber reads voice notes. Nil when unconfigured, and the tool says so rather
+	// than failing obscurely — this is the only component that sends data off the machine.
+	Transcriber *transcribe.Client
 }
 
 // Goal drives sets, reps and rest. Fat loss keeps density high; strength trades volume

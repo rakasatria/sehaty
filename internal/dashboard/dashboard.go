@@ -19,6 +19,11 @@ import (
 type Deps struct {
 	DB  *storage.DB
 	Key []byte
+
+	// WebApp validates a Telegram Mini App launch. Optional: without it the /app routes
+	// are not registered at all, rather than registered and refusing — an endpoint that
+	// exists only when it can work is one fewer thing to reason about.
+	WebApp WebAppResolver
 }
 
 type view struct {
@@ -40,6 +45,20 @@ type view struct {
 	Protein   float64
 	Recent    []line
 	Limits    []string
+
+	// InTelegram is true only when the page is being served into the Mini App webview.
+	//
+	// It gates the one external script on the whole site. Telegram injects its theme
+	// variables through that script, so the Mini App needs it; the signed-link path in an
+	// ordinary browser does not, and loading it there would tell telegram.org that
+	// somebody opened their health record — while making the footer's promise of no
+	// third-party requests a lie.
+	InTelegram bool
+
+	// Weights is the plotted line. buildSeries and buildBars were written, tested, and
+	// then never called: the view had no field to carry a chart, so the page has only
+	// ever shown the latest number. The geometry was correct and invisible.
+	Weights Series
 }
 
 type line struct{ Date, What, Detail string }
@@ -48,6 +67,7 @@ type line struct{ Date, What, Detail string }
 // without a link — an unauthenticated route that lists profiles would undo the point.
 func Handler(d Deps) http.Handler {
 	mux := http.NewServeMux()
+	d.miniApp(mux)
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Write([]byte(`{"status":"ok"}`))
 	})
@@ -68,10 +88,7 @@ func Handler(d Deps) http.Handler {
 			return
 		}
 		// A dashboard link should never be cached by a proxy or a browser history sync.
-		w.Header().Set("Cache-Control", "no-store, private")
-		w.Header().Set("Referrer-Policy", "no-referrer")
-		w.Header().Set("X-Content-Type-Options", "nosniff")
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		secure(w)
 		_ = tpl.ExecuteTemplate(w, "page", v)
 	})
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -86,11 +103,36 @@ func Handler(d Deps) http.Handler {
 // errorPage renders a refusal. Every 401 is byte-identical whatever caused it — telling
 // someone their forged link is merely "expired" would confirm the profile id inside it was
 // real.
-func errorPage(w http.ResponseWriter, code int, name string) {
+// CSP is the policy every dashboard response carries.
+//
+// It began life as a <meta> tag inside the Mini App shell, which was a mistake: a meta
+// policy applies to the document that declares it and nothing else. The shell POSTs a form
+// and NAVIGATES, so the page that actually renders somebody's health record — at
+// /app/enter and at /d/{token} alike — was arriving with no policy at all. A header
+// applies to the response it is sent with, which is the thing that needed protecting.
+//
+// telegram.org is admitted because the Mini App cannot work without it: initData exists
+// only inside the webview and only that script exposes it. Nothing else is allowed a
+// connection, so a compromised dependency has nowhere to send what it reads.
+const CSP = "default-src 'none'; " +
+	"script-src https://telegram.org 'unsafe-inline'; " +
+	"style-src 'unsafe-inline'; " +
+	"img-src 'self' data:; " +
+	"form-action 'self'; " +
+	"base-uri 'none'; " +
+	"frame-ancestors 'none'"
+
+// secure sets the headers every response from this server carries.
+func secure(w http.ResponseWriter) {
+	w.Header().Set("Content-Security-Policy", CSP)
 	w.Header().Set("Cache-Control", "no-store, private")
 	w.Header().Set("Referrer-Policy", "no-referrer")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+}
+
+func errorPage(w http.ResponseWriter, code int, name string) {
+	secure(w)
 	w.WriteHeader(code)
 	_ = tpl.ExecuteTemplate(w, name, nil)
 }
@@ -117,6 +159,18 @@ func build(d Deps, profileID string) (view, error) {
 		v.Weight = &kg
 		v.WeightStr = fmt.Sprintf("%.1f", kg)
 		v.WeightAgo = last.Date
+
+		dates := make([]string, 0, len(ws))
+		vals := make([]float64, 0, len(ws))
+		for _, w := range ws {
+			dates = append(dates, w.Date)
+			vals = append(vals, w.WeightKg)
+		}
+		// lastPerDay, not daily: weight is MEASURED, so two weigh-ins on one day are two
+		// readings of the same thing and the later one wins. Food accumulates; weight
+		// does not.
+		dd, vv := lastPerDay(dates, vals)
+		v.Weights = buildSeries(dd, vv, 1)
 	}
 	sets, _ := d.DB.Sets(profileID, window)
 	days := map[string]bool{}

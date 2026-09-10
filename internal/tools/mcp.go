@@ -426,7 +426,7 @@ func RegisterTools(s *mcp.Server, d Deps, passphrase string) {
 //
 // One server instance is shared across sessions: it holds no per-request state, and the
 // database enforces isolation by profile_id rather than by connection.
-func Serve(addr string, d Deps, passphrase string) error {
+func Serve(addr string, d Deps, passphrase, token string) error {
 	srv := mcp.NewServer(&mcp.Implementation{Name: "sehaty", Version: "0.1.0"}, nil)
 	RegisterTools(srv, d, passphrase)
 	// The SDK defaults MaxRequestBodyBytes to 4 MiB. Base64 inflates a file by 4/3, so
@@ -441,7 +441,9 @@ func Serve(addr string, d Deps, passphrase string) error {
 		func(*http.Request) *mcp.Server { return srv },
 		&mcp.StreamableHTTPOptions{MaxRequestBodyBytes: MaxRequestBody})
 	mux := http.NewServeMux()
-	mux.Handle("/mcp", h)
+	// Only a caller holding the token may reach the tools. /healthz stays open so a
+	// monitor can check liveness without being trusted with health data.
+	mux.Handle("/mcp", RequireToken(h, token))
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Write([]byte(`{"status":"ok"}`))
 	})

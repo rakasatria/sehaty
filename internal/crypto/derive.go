@@ -20,6 +20,7 @@ const (
 	infoDB    = "sehaty:db:adiantum:v1"
 	infoDocs  = "sehaty:doc:aes256gcm:v1"
 	infoMedia = "sehaty:media:aes256gcm:v1"
+	infoDash  = "sehaty:dashboard:hmac:v1"
 )
 
 // decodeMaster validates SEHATY_KEY and returns the raw master key.
@@ -57,4 +58,17 @@ func DBKeyHex(b64 string) (string, error) {
 		return "", fmt.Errorf("derive database key: %w", err)
 	}
 	return hex.EncodeToString(k), nil
+}
+
+// DashboardKey returns the subkey that signs time-limited dashboard links.
+//
+// Its own subkey, like every other use: a signing key and an encryption key must never be
+// the same bytes, and if a link signature is ever compromised it must not implicate the
+// data at rest.
+func DashboardKey(b64 string) ([]byte, error) {
+	master, err := decodeMaster(b64)
+	if err != nil {
+		return nil, err
+	}
+	return derive(master, infoDash)
 }

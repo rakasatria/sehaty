@@ -304,6 +304,17 @@ func RegisterTools(s *mcp.Server, d Deps, passphrase string) {
 			return &mcp.CallToolResult{Content: []mcp.Content{content}}, struct{}{}, nil
 		})
 
+	mcp.AddTool(s, &mcp.Tool{Name: "dashboard_link",
+		Annotations: annAdd(),
+		Description: "Mint a link to this person's dashboard, valid for ONE HOUR. Call it when someone asks to see their progress as a page rather than as text. Do NOT post the link anywhere shared — the link is the only credential, so anyone holding it can read that profile until it expires. Returns the URL and the exact expiry time; ask again for a new one after that."},
+		func(ctx context.Context, r *mcp.CallToolRequest, a DashboardLinkArgs) (*mcp.CallToolResult, DashboardLinkOut, error) {
+			out, err := DashboardLink(d, a)
+			if err != nil {
+				return nil, DashboardLinkOut{}, err
+			}
+			return nil, out, nil
+		})
+
 	mcp.AddTool(s, &mcp.Tool{Name: "list_documents",
 		Annotations: annRead(),
 		Description: "List a profile's stored documents — the nutritionist's prescription, clinical notes, injury history — with their current version numbers. Call this BEFORE writing any document, so you reuse an existing key instead of inventing a second name for the same thing. Does NOT return document bodies; use get_document for that. Returns each document's key, title, current version and last-updated time, plus suggested keys for documents this profile does not have yet."},

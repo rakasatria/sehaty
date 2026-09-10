@@ -47,6 +47,10 @@ Environment=SEHATY_FOODS=/opt/sehaty/tkpi-2020.json
 # the same reason the master key does.
 Environment=SEHATY_MCP_HOST=127.0.0.1
 Environment=SEHATY_MCP_PORT=8765
+# The dashboard listens SEPARATELY. MCP is tool execution and must never be
+# published; the dashboard is read-only and safe behind a tunnel.
+Environment=SEHATY_DASH_PORT=8766
+Environment=SEHATY_DASH_ADVERTISE=10.254.1.105
 
 # Hardening. Cheap here because the service needs one directory and one port.
 # ProtectSystem=strict makes /opt and /etc read-only, which is what we want: the

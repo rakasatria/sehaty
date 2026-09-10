@@ -26,11 +26,13 @@ func today() string { return time.Now().Format("2006-01-02") }
 // Deps is what every handler needs. Passed explicitly rather than held in package
 // state so tests can build one per test with a temp database.
 type Deps struct {
-	DB     *storage.DB
-	Cat    *catalog.Catalog
-	Cipher *crypto.Cipher // document bodies; never nil, the key is required at startup
-	Media  media.Store    // voice notes and meal photos; consumed from Plan 3 onward
-	Food   *food.Table    // Indonesian food composition (TKPI 2020)
+	DB       *storage.DB
+	Cat      *catalog.Catalog
+	Cipher   *crypto.Cipher // document bodies; never nil, the key is required at startup
+	Media    media.Store    // voice notes and meal photos; consumed from Plan 3 onward
+	Food     *food.Table    // Indonesian food composition (TKPI 2020)
+	DashKey  []byte         // signs time-limited dashboard links
+	DashBase string         // public base URL of the dashboard
 }
 
 // Goal drives sets, reps and rest. Fat loss keeps density high; strength trades volume

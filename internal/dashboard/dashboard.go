@@ -67,30 +67,27 @@ type line struct{ Date, What, Detail string }
 // without a link — an unauthenticated route that lists profiles would undo the point.
 func Handler(d Deps) http.Handler {
 	mux := http.NewServeMux()
-	d.miniApp(mux)
+	d.app(mux)
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Write([]byte(`{"status":"ok"}`))
 	})
+	// A signed link serves the SAME application as the Mini App does, so there is
+	// one design and one code path rather than two that drift. The token is
+	// verified here to fail fast and to keep a dead link from rendering a shell
+	// that only fails once JavaScript runs — but the record itself still arrives
+	// through /api/summary, which verifies the token again on its own account.
 	mux.HandleFunc("/d/", func(w http.ResponseWriter, r *http.Request) {
 		token := strings.TrimPrefix(r.URL.Path, "/d/")
-		profileID, err := dashlink.Verify(d.Key, token, time.Now())
-		if err != nil {
-			// One message for every failure. Distinguishing "expired" from "forged"
-			// would confirm to a forger that the profile id inside was real.
+		if _, err := dashlink.Verify(d.Key, token, time.Now()); err != nil {
+			// One message for every failure. Distinguishing "expired" from
+			// "forged" would confirm to a forger that the profile id inside was
+			// real.
 			errorPage(w, http.StatusUnauthorized, "gone")
 			return
 		}
-		v, err := build(d, profileID)
-		if err != nil {
-			// A health app that fails to render must not look like a health app that
-			// lost your data. The page says so; this is only the plumbing.
-			errorPage(w, http.StatusInternalServerError, "servererror")
-			return
-		}
-		// A dashboard link should never be cached by a proxy or a browser history sync.
-		secure(w)
-		_ = tpl.ExecuteTemplate(w, "page", v)
+		d.serveApp(w)
 	})
+
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		// A different situation from a dead link, and safe to describe plainly: there is
 		// simply no page here. Saying so reveals nothing, because there is nothing to
@@ -115,9 +112,17 @@ func Handler(d Deps) http.Handler {
 // only inside the webview and only that script exposes it. Nothing else is allowed a
 // connection, so a compromised dependency has nowhere to send what it reads.
 const CSP = "default-src 'none'; " +
-	"script-src https://telegram.org 'unsafe-inline'; " +
-	"style-src 'unsafe-inline'; " +
+	// 'self' is what the Mini App bundle needs. Without it the page loads and
+	// then the browser refuses the application's own script and stylesheet — a
+	// blank screen that looks nothing like a policy error, and that curl reports
+	// as a clean 200 because the HTML really did arrive.
+	"script-src 'self' https://telegram.org 'unsafe-inline'; " +
+	"style-src 'self' 'unsafe-inline'; " +
+	// The client fetches /api/summary from this origin. Under default-src 'none'
+	// that request is blocked too, so it has to be named.
+	"connect-src 'self'; " +
 	"img-src 'self' data:; " +
+	"font-src 'self'; " +
 	"form-action 'self'; " +
 	"base-uri 'none'; " +
 	"frame-ancestors 'none'"

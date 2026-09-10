@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+    />
+    <title>Sehaty</title>
+    <!--
+      Paint the ground before any JS or bundled CSS arrives, so opening the
+      app never flashes white in a dark Telegram theme (or vice versa).
+    -->
+    <style>
+      html {
+        background: var(--tg-theme-bg-color, #f4f6f3);
+      }
+      @media (prefers-color-scheme: dark) {
+        html {
+          background: var(--tg-theme-bg-color, #141715);
+        }
+      }
+    </style>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

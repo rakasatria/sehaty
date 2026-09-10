@@ -1,0 +1,94 @@
+/* ============================================================
+   Sehaty design tokens.
+
+   Every color resolves in two steps:
+     1. Telegram's injected variable, if present (inside Telegram
+        the app always harmonises with the person's own theme);
+     2. otherwise Sehaty's own fallback — cool paper and ink with
+        a deep leaf-green accent, in light and dark.
+   ============================================================ */
+
+:root {
+  color-scheme: light dark;
+
+  /* --- browser fallbacks (light) --- */
+  --fb-bg: #f4f6f3;
+  --fb-text: #1c201d;
+  --fb-hint: #66706a;
+  --fb-secondary-bg: #e9ede8;
+  --fb-link: #2b6e52;
+  --fb-button: #2b6e52;
+  --fb-button-text: #f4f6f3;
+
+  /* --- semantic tokens --- */
+  --bg: var(--tg-theme-bg-color, var(--fb-bg));
+  --text: var(--tg-theme-text-color, var(--fb-text));
+  --hint: var(--tg-theme-hint-color, var(--fb-hint));
+  --surface: var(--tg-theme-secondary-bg-color, var(--fb-secondary-bg));
+  --accent: var(--tg-theme-link-color, var(--fb-link));
+  --button: var(--tg-theme-button-color, var(--fb-button));
+  --button-text: var(--tg-theme-button-text-color, var(--fb-button-text));
+
+  /* hairlines & washes are derived from ink, so they follow any theme */
+  --rule: rgba(127, 127, 127, 0.28);
+  --rule-soft: rgba(127, 127, 127, 0.16);
+  --accent-wash: rgba(127, 160, 140, 0.14);
+
+  /* --- type --- */
+  --font-sans: -apple-system, 'SF Pro Text', Roboto, 'Segoe UI', system-ui, sans-serif;
+  --font-serif: ui-serif, 'New York', Georgia, 'Noto Serif', 'Times New Roman', serif;
+
+  /* --- motion vocabulary (single source, mirrored in motion.ts) ---
+     arrive: fast start, long settle. leave: brief and quiet. */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --t-leave: 150ms;
+  --t-arrive: 240ms;
+  --t-stage: 560ms;   /* one entrance stage */
+  --stagger: 70ms;    /* between entrance stages */
+  --t-draw: 800ms;    /* the weight trace */
+}
+
+@supports (color: color-mix(in oklab, red, red)) {
+  :root {
+    --rule: color-mix(in oklab, var(--text) 30%, transparent);
+    --rule-soft: color-mix(in oklab, var(--text) 15%, transparent);
+    --accent-wash: color-mix(in oklab, var(--accent) 16%, transparent);
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fb-bg: #141715;
+    --fb-text: #e6eae6;
+    --fb-hint: #8a948d;
+    --fb-secondary-bg: #1d211e;
+    --fb-link: #79bd9a;
+    --fb-button: #2f7a5b;
+    --fb-button-text: #eef2ee;
+  }
+}
+
+/* Explicit scheme override: Telegram reports its scheme via JS, and QA can
+   force one with ?scheme=light|dark. Values mirror the blocks above. */
+:root[data-forced-scheme='light'] {
+  color-scheme: light;
+  --fb-bg: #f4f6f3;
+  --fb-text: #1c201d;
+  --fb-hint: #66706a;
+  --fb-secondary-bg: #e9ede8;
+  --fb-link: #2b6e52;
+  --fb-button: #2b6e52;
+  --fb-button-text: #f4f6f3;
+}
+
+:root[data-forced-scheme='dark'] {
+  color-scheme: dark;
+  --fb-bg: #141715;
+  --fb-text: #e6eae6;
+  --fb-hint: #8a948d;
+  --fb-secondary-bg: #1d211e;
+  --fb-link: #79bd9a;
+  --fb-button: #2f7a5b;
+  --fb-button-text: #eef2ee;
+}

@@ -43,18 +43,53 @@ func get(h http.Handler, path string) *httptest.ResponseRecorder {
 	return rec
 }
 
-func TestValidLinkShowsTheProfile(t *testing.T) {
+// A valid link opens the application — and the application ONLY. The record used
+// to be baked into this response; it now arrives separately through
+// /api/summary, which re-verifies the token on its own account. So the thing to
+// assert here changed: the page must open, and it must carry nothing.
+func TestValidLinkOpensTheAppAndCarriesNoRecord(t *testing.T) {
 	d, id := setup(t)
 	tok, _ := dashlink.Mint(signKey, id, time.Now())
 	rec := get(Handler(d), "/d/"+tok)
 	if rec.Code != http.StatusOK {
-		t.Fatalf("got %d", rec.Code)
+		t.Fatalf("a valid link got %d", rec.Code)
 	}
 	body := rec.Body.String()
-	for _, want := range []string{"Raka", "87.4", "push-up", "fat loss"} {
-		if !strings.Contains(body, want) {
-			t.Errorf("page does not mention %q", want)
+	if !strings.Contains(body, "/app/assets/") {
+		t.Error("a valid link did not serve the application")
+	}
+	for _, leak := range []string{"Raka", "87.4", "push-up", "fat_loss"} {
+		if strings.Contains(body, leak) {
+			t.Errorf("the shell carries %q before anything was verified", leak)
 		}
+	}
+}
+
+// And the record it can then obtain is its own, and no one else's.
+func TestALinkCanOnlyFetchItsOwnRecord(t *testing.T) {
+	d, mine := setup(t)
+
+	other, _ := storage.NewProfileID()
+	if err := d.DB.SaveProfile(storage.Profile{ID: other, DisplayName: "Someone Else",
+		Goal: "strength"}); err != nil {
+		t.Fatal(err)
+	}
+
+	tok, _ := dashlink.Mint(signKey, mine, time.Now())
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/api/summary?days=30", nil)
+	req.Header.Set("X-Dashboard-Token", tok)
+	Handler(d).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("a valid token was refused: %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "Raka") {
+		t.Error("the token did not return its own record")
+	}
+	if strings.Contains(body, "Someone Else") || strings.Contains(body, other) {
+		t.Error("a token reached another person's record")
 	}
 }
 
@@ -108,7 +143,9 @@ func TestResponseIsNotCacheable(t *testing.T) {
 	}
 }
 
-// A link for one person must never render another's record.
+// A link for one person must never fetch another's record. The page is now the
+// same shell for everybody, so the question moved to the API — which is where it
+// was always really being decided.
 func TestLinkOnlyOpensItsOwnProfile(t *testing.T) {
 	d, _ := setup(t)
 	other, _ := storage.NewProfileID()
@@ -117,12 +154,18 @@ func TestLinkOnlyOpensItsOwnProfile(t *testing.T) {
 		t.Fatal(err)
 	}
 	tok, _ := dashlink.Mint(signKey, other, time.Now())
-	rec := get(Handler(d), "/d/"+tok)
-	if strings.Contains(rec.Body.String(), "Raka") {
-		t.Error("Dina's link rendered Raka's record")
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/api/summary?days=30", nil)
+	req.Header.Set("X-Dashboard-Token", tok)
+	Handler(d).ServeHTTP(rec, req)
+
+	body := rec.Body.String()
+	if strings.Contains(body, "Raka") {
+		t.Error("Dina's link returned Raka's record")
 	}
-	if !strings.Contains(rec.Body.String(), "Dina") {
-		t.Error("Dina's link did not render Dina")
+	if !strings.Contains(body, "Dina") {
+		t.Error("Dina's link did not return Dina's record")
 	}
 }
 

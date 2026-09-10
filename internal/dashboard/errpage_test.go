@@ -2,6 +2,7 @@ package dashboard
 
 import (
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -74,13 +75,12 @@ func TestExpiredPageDoesNotAssertTheLinkWasEverValid(t *testing.T) {
 	}
 }
 
+// The 500 page still has to reassure, wherever it is reached from. It is no
+// longer produced by loading a link — the shell renders before anything is read —
+// so it is exercised directly rather than through a route that no longer fails.
 func TestServerErrorReassuresDataIsIntact(t *testing.T) {
-	d, id := setup(t)
-	tok, _ := dashlink.Mint(signKey, id, time.Now())
-	if err := d.DB.DeleteProfile(id); err != nil {
-		t.Fatal(err)
-	}
-	rec := get(Handler(d), "/d/"+tok)
+	rec := httptest.NewRecorder()
+	errorPage(rec, http.StatusInternalServerError, "servererror")
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("got %d, want 500", rec.Code)
 	}
@@ -89,7 +89,24 @@ func TestServerErrorReassuresDataIsIntact(t *testing.T) {
 		!strings.Contains(low, "not been lost") {
 		t.Error("the 500 does not reassure that records are intact")
 	}
+}
+
+// And a record that cannot be read fails as a failure, without naming anybody.
+func TestTheApiFailsWithoutNamingTheProfile(t *testing.T) {
+	d, id := setup(t)
+	tok, _ := dashlink.Mint(signKey, id, time.Now())
+	if err := d.DB.DeleteProfile(id); err != nil {
+		t.Fatal(err)
+	}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/api/summary?days=30", nil)
+	req.Header.Set("X-Dashboard-Token", tok)
+	Handler(d).ServeHTTP(rec, req)
+
+	if rec.Code == http.StatusOK {
+		t.Fatal("a deleted profile returned a record")
+	}
 	if strings.Contains(rec.Body.String(), id) {
-		t.Error("the 500 leaks the profile id")
+		t.Error("the failure leaks the profile id")
 	}
 }

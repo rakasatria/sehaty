@@ -443,7 +443,7 @@ func Serve(addr string, d Deps, passphrase, token string) error {
 	mux := http.NewServeMux()
 	// Only a caller holding the token may reach the tools. /healthz stays open so a
 	// monitor can check liveness without being trusted with health data.
-	mux.Handle("/mcp", RequireToken(h, token))
+	mux.Handle("/mcp", Authenticate(h, d.DB, token))
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Write([]byte(`{"status":"ok"}`))
 	})

@@ -12,6 +12,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/rakasatria/sehaty/internal/crypto"
 	"github.com/rakasatria/sehaty/internal/storage"
@@ -44,7 +45,13 @@ func main() {
 	// the worst possible failure mode for a delete tool.
 	args := os.Args[1:]
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "usage: sehatyctl profiles | delete-profile <id> --yes-really-delete")
+		fmt.Fprintln(os.Stderr, "usage:\n"+
+			"  sehatyctl profiles\n"+
+			"  sehatyctl delete-profile <id> --yes-really-delete\n"+
+			"  sehatyctl token issue <profile-id|--admin> [label]\n"+
+			"  sehatyctl token list\n"+
+			"  sehatyctl token revoke <token-id>\n"+
+			"  sehatyctl token reset <profile-id>   (revoke every token for one person)")
 		os.Exit(2)
 	}
 
@@ -94,6 +101,79 @@ func main() {
 			fail(err)
 		}
 		fmt.Println("\ndeleted.")
+
+	case "token":
+		if len(args) < 2 {
+			fail(fmt.Errorf("token needs a subcommand: issue, list, revoke or reset"))
+		}
+		switch args[1] {
+		case "issue":
+			if len(args) < 3 {
+				fail(fmt.Errorf("token issue needs a profile id, or --admin"))
+			}
+			profile, label := args[2], ""
+			if profile == "--admin" {
+				profile = ""
+			}
+			if len(args) > 3 {
+				label = strings.Join(args[3:], " ")
+			}
+			secret, tok, err := db.IssueToken(profile, label)
+			if err != nil {
+				fail(err)
+			}
+			who := tok.ProfileID
+			if who == "" {
+				who = "(admin — may act on any profile)"
+			}
+			fmt.Printf("token id   %s\nprofile    %s\nlabel      %s\n\n%s\n\n",
+				tok.ID, who, tok.Label, secret)
+			// Only moment this string exists outside the caller's hands: the database
+			// stores its hash, so a lost token is reissued, never recovered.
+			fmt.Println("Copy it now — only the hash is stored, so it cannot be shown again.")
+
+		case "list":
+			toks, err := db.ListTokens()
+			if err != nil {
+				fail(err)
+			}
+			for _, t := range toks {
+				who := t.ProfileID
+				if who == "" {
+					who = "(admin)"
+				}
+				state := "active"
+				if t.Revoked() {
+					state = "revoked " + t.RevokedAt[:10]
+				}
+				fmt.Printf("%-14s %-24s %-9s %-10s %s\n",
+					t.ID, who, state, t.CreatedAt[:10], t.Label)
+			}
+			fmt.Printf("%d token(s)\n", len(toks))
+
+		case "revoke":
+			if len(args) < 3 {
+				fail(fmt.Errorf("token revoke needs a token id (see: sehatyctl token list)"))
+			}
+			if err := db.RevokeToken(args[2]); err != nil {
+				fail(err)
+			}
+			fmt.Println("revoked.")
+
+		case "reset":
+			if len(args) < 3 {
+				fail(fmt.Errorf("token reset needs a profile id"))
+			}
+			n, err := db.RevokeProfileTokens(args[2])
+			if err != nil {
+				fail(err)
+			}
+			fmt.Printf("revoked %d token(s) for %s. Issue a new one with: "+
+				"sehatyctl token issue %s\n", n, args[2], args[2])
+
+		default:
+			fail(fmt.Errorf("unknown token subcommand %q", args[1]))
+		}
 
 	default:
 		fail(fmt.Errorf("unknown command %q", args[0]))

@@ -111,3 +111,17 @@ CREATE TABLE IF NOT EXISTS food_alias (
   source     TEXT NOT NULL DEFAULT 'agent',
   updated_at TEXT NOT NULL
 );
+
+-- API credentials. The plaintext token is NEVER stored, only its SHA-256 - anyone who
+-- reads a backup gets hashes, not working credentials. profile_id empty means an admin
+-- token, which registration needs: a person has no profile until register creates one.
+-- Revoked rows are KEPT so the history of what once had access survives.
+CREATE TABLE IF NOT EXISTS api_token (
+  id          TEXT PRIMARY KEY,
+  token_hash  TEXT NOT NULL UNIQUE,
+  profile_id  TEXT NOT NULL DEFAULT '',
+  label       TEXT NOT NULL DEFAULT '',
+  created_at  TEXT NOT NULL,
+  revoked_at  TEXT
+);
+CREATE INDEX IF NOT EXISTS api_token_hash ON api_token(token_hash);

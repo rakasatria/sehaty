@@ -220,6 +220,17 @@ func NewRegistry(d tools.Deps) *Registry {
 			return tools.UpdateProfile(r.deps, in)
 		})
 
+	r.add("estimate_energy",
+		"Estimate how much energy they use in a day — Mifflin-St Jeor, from their age, "+
+			"height, sex, latest weight and training frequency. Returns a RANGE with its "+
+			"uncertainty. You may NOT do this arithmetic yourself; call this. It refuses "+
+			"when an input is missing, and the right response to that is to ask for the "+
+			"missing thing, never to assume it.",
+		obj(map[string]any{}),
+		func(_ context.Context, p string, _ json.RawMessage) (any, error) {
+			return tools.EstimateEnergy(r.deps, p)
+		})
+
 	r.add("reset_assessment",
 		"Start the questions over: clears equipment, goal, experience, injuries, age, "+
 			"height, sex, allergies, dislikes and diet notes. Does NOT delete anything "+

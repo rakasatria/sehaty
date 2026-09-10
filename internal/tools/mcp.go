@@ -167,6 +167,17 @@ func RegisterTools(s *mcp.Server, d Deps, passphrase string) {
 			return ok(profileOut(d, p))
 		})
 
+	mcp.AddTool(s, &mcp.Tool{Name: "estimate_energy",
+		Annotations: annRead(),
+		Description: "Estimate how much energy this person uses in a day, from their age, height, sex, latest recorded weight and training frequency, using the Mifflin-St Jeor equation. Returns a RANGE with its uncertainty, never a single target. Refuses if any input is missing rather than assuming one. The arithmetic happens here, not in the model."},
+		func(ctx context.Context, r *mcp.CallToolRequest, a ProfileArgs) (*mcp.CallToolResult, EnergyEstimate, error) {
+			out, err := EstimateEnergy(d, a.Profile)
+			if err != nil {
+				return nil, EnergyEstimate{}, err
+			}
+			return ok(out)
+		})
+
 	mcp.AddTool(s, &mcp.Tool{Name: "reset_assessment",
 		Annotations: annOverwrite(),
 		Description: "Clear a profile's answers — equipment, goal, experience, injuries, age, height, sex, allergies, dislikes, diet notes — so the questions can be asked again from the start. Logged training, food, weight, cardio, documents and media are NOT touched and cannot be deleted with this or any other tool. Confirm with the person before calling it: their previous answers are gone afterwards and can only be restored by answering again."},

@@ -111,7 +111,7 @@ func TestHistoryHoldsOnlyWhatWasSaid(t *testing.T) {
 // The prompt has to carry the rules the tools enforce, or the model fights them.
 func TestSystemPromptStatesTheRulesThatMatter(t *testing.T) {
 	for _, want := range []string{"Never invent a number", "find_foods", "ask",
-		"not a doctor", "Composite dishes"} {
+		"not their doctor", "Composite dishes"} {
 		if !strings.Contains(SystemPrompt, want) {
 			t.Errorf("system prompt does not mention %q", want)
 		}
@@ -132,5 +132,29 @@ func TestDisabledWithoutAKey(t *testing.T) {
 	}
 	if New("k", "", nil).Enabled() {
 		t.Fatal("reported enabled with no tools")
+	}
+}
+
+// The agent knows its subject now, which makes these two limits load-bearing rather
+// than decorative: a model that can reason about programming and macros can produce a
+// confident calorie target, and a confident number from software is the one people
+// follow instead of getting assessed.
+func TestExpertiseDoesNotBecomePrescription(t *testing.T) {
+	for _, want := range []string{
+		"exercise science",
+		"not their doctor",
+		"not their dietitian",
+		"No supplements and no medication",
+		"teaching and prescribing",
+		"You still do not PRESCRIBE",
+	} {
+		if !strings.Contains(SystemPrompt, want) {
+			t.Errorf("the system prompt no longer says %q", want)
+		}
+	}
+	// An estimate offered with its error bars is information; an instruction about
+	// someone's body is not, and that distinction is the whole of what is left.
+	if !strings.Contains(SystemPrompt, "instructions about someone's body come from someone who") {
+		t.Error("the prompt no longer separates informing from instructing")
 	}
 }

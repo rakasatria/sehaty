@@ -57,8 +57,7 @@ func Handler(d Deps) http.Handler {
 		if err != nil {
 			// One message for every failure. Distinguishing "expired" from "forged"
 			// would confirm to a forger that the profile id inside was real.
-			w.WriteHeader(http.StatusUnauthorized)
-			_ = tpl.ExecuteTemplate(w, "gone", nil)
+			errorPage(w, http.StatusUnauthorized, "gone")
 			return
 		}
 		v, err := build(d, profileID)
@@ -74,10 +73,24 @@ func Handler(d Deps) http.Handler {
 		_ = tpl.ExecuteTemplate(w, "page", v)
 	})
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusNotFound)
-		_ = tpl.ExecuteTemplate(w, "gone", nil)
+		// A different situation from a dead link, and safe to describe plainly: there is
+		// simply no page here. Saying so reveals nothing, because there is nothing to
+		// reveal — no index, no directory, no names.
+		errorPage(w, http.StatusNotFound, "notfound")
 	})
 	return mux
+}
+
+// errorPage renders a refusal. Every 401 is byte-identical whatever caused it — telling
+// someone their forged link is merely "expired" would confirm the profile id inside it was
+// real.
+func errorPage(w http.ResponseWriter, code int, name string) {
+	w.Header().Set("Cache-Control", "no-store, private")
+	w.Header().Set("Referrer-Policy", "no-referrer")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(code)
+	_ = tpl.ExecuteTemplate(w, name, nil)
 }
 
 func build(d Deps, profileID string) (view, error) {
@@ -185,9 +198,35 @@ font-size:.75rem;font-family:ui-monospace,monospace}
 <footer>Sehaty · this link stops working an hour after it was made</footer>
 </div></body></html>{{end}}
 
-{{define "gone"}}<!doctype html><html lang="en"><head>{{template "head"}}</style></head><body><div class="wrap">
-<h1>Link no longer works</h1>
-<p class="sub">expired, or never valid</p>
-<p>Dashboard links last one hour. Ask your agent for a new one.</p>
-</div></body></html>{{end}}
+{{define "state"}}
+.state{max-width:31rem;margin:13vh auto 0;text-align:center}
+.mark{width:76px;height:76px;color:var(--rule);margin-bottom:24px}
+.state h1{font-size:1.55rem;margin:0 0 12px;letter-spacing:-.01em}
+.state p{color:var(--soft);margin:0 0 22px;font-size:.97rem}
+.hint{display:inline-block;border:1px solid var(--rule);border-radius:4px;padding:11px 16px;
+background:var(--card);color:var(--faint);font-size:.83rem;
+font-family:ui-monospace,SFMono-Regular,monospace;text-align:left;line-height:1.7}
+.hint b{color:var(--soft);font-weight:600;font-family:ui-sans-serif,system-ui,sans-serif;
+font-size:.7rem;letter-spacing:.12em;text-transform:uppercase}
+{{end}}
+
+{{define "gone"}}<!doctype html><html lang="en"><head>{{template "head"}}{{template "state"}}
+</style></head><body><div class="wrap"><div class="state">
+<svg class="mark" viewBox="0 0 100 100" aria-hidden="true" fill="none" stroke="currentColor"
+ stroke-width="1.5" stroke-linecap="round"><circle cx="50" cy="50" r="33"/><path d="M50 29v22l14 9"/></svg>
+<h1>This link has expired</h1>
+<p>Dashboard links last one&nbsp;hour. That is deliberate — the link is the only key, so it
+should not outlive the moment you asked for&nbsp;it.</p>
+<div class="hint"><b>To get back in</b><br>Ask your agent for a new dashboard link.</div>
+</div></div></body></html>{{end}}
+
+{{define "notfound"}}<!doctype html><html lang="en"><head>{{template "head"}}{{template "state"}}
+</style></head><body><div class="wrap"><div class="state">
+<svg class="mark" viewBox="0 0 100 100" aria-hidden="true" fill="none" stroke="currentColor"
+ stroke-width="1.5" stroke-linecap="round"><circle cx="50" cy="50" r="33"/><path d="M35 50h30"/></svg>
+<h1>Nothing here</h1>
+<p>Sehaty has no front page and no directory of people. Every dashboard is reached by its
+own link and nothing&nbsp;else.</p>
+<div class="hint"><b>Looking for your dashboard?</b><br>Ask your agent for a link.</div>
+</div></div></body></html>{{end}}
 `))

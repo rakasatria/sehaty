@@ -237,6 +237,46 @@ func RegisterTools(s *mcp.Server, d Deps, passphrase string) {
 			return ok(map[string]any{"profile": a.Profile, "minutes": a.Minutes})
 		})
 
+	mcp.AddTool(s, &mcp.Tool{Name: "list_documents",
+		Description: "List a profile's stored documents — the nutritionist's prescription, clinical notes, injury history — with their current version numbers. Call this BEFORE writing any document, so you reuse an existing key instead of inventing a second name for the same thing. Does NOT return document bodies; use get_document for that. Returns each document's key, title, current version and last-updated time, plus suggested keys for documents this profile does not have yet."},
+		func(ctx context.Context, r *mcp.CallToolRequest, a ProfileArgs) (*mcp.CallToolResult, ListDocumentsOut, error) {
+			out, err := ListDocuments(d, a.Profile)
+			if err != nil {
+				return nil, ListDocumentsOut{}, err
+			}
+			return nil, out, nil
+		})
+
+	mcp.AddTool(s, &mcp.Tool{Name: "get_document",
+		Description: "Read one document, current version by default or a specific earlier version. Call this whenever you need what a document actually says, and always immediately before writing changes back to it. Do NOT rely on a copy you read earlier in the conversation — it may have moved. Returns the markdown body, the version number, and the expected_version value to pass when writing your changes."},
+		func(ctx context.Context, r *mcp.CallToolRequest, a GetDocumentArgs) (*mcp.CallToolResult, GetDocumentOut, error) {
+			out, err := GetDocument(d, a)
+			if err != nil {
+				return nil, GetDocumentOut{}, err
+			}
+			return nil, out, nil
+		})
+
+	mcp.AddTool(s, &mcp.Tool{Name: "put_document",
+		Description: "Store a document as a NEW VERSION, keeping every earlier version readable. Call this to record a nutritionist's prescription, clinical notes or injury history, passing create_new for a document that does not exist yet. Do NOT write without first reading: updating an existing document requires expected_version from get_document, so a stale copy cannot overwrite newer content. Returns the new version number; a near-duplicate key or a stale expected_version is refused with an explanation rather than silently applied."},
+		func(ctx context.Context, r *mcp.CallToolRequest, a PutDocumentArgs) (*mcp.CallToolResult, PutDocumentOut, error) {
+			out, err := PutDocument(d, a)
+			if err != nil {
+				return nil, PutDocumentOut{}, err
+			}
+			return nil, out, nil
+		})
+
+	mcp.AddTool(s, &mcp.Tool{Name: "document_history",
+		Description: "List every stored version of one document, newest first. Call this to answer questions about what a document used to say — what the nutritionist prescribed in September, before the revision. Does NOT return bodies; pass a version number to get_document to read one. Returns each version's number, title and timestamp."},
+		func(ctx context.Context, r *mcp.CallToolRequest, a GetDocumentArgs) (*mcp.CallToolResult, DocumentHistoryOut, error) {
+			out, err := DocumentHistory(d, a.Profile, a.Key)
+			if err != nil {
+				return nil, DocumentHistoryOut{}, err
+			}
+			return nil, out, nil
+		})
+
 	mcp.AddTool(s, &mcp.Tool{Name: "find_foods",
 		Description: "Search the Indonesian food composition table (TKPI 2020) and return per-100g energy and macros for each match. Call this when someone names a food and you need its exact table entry before logging it, or when they ask what is in a food. Do NOT use it for composite dishes — the table lists ingredients, so nasi goreng and gado-gado are absent and must be logged as their parts. Returns each food's code, name, per-100g macros, its original source citation, and any verification flag meaning the value could not be confirmed across sources."},
 		func(ctx context.Context, r *mcp.CallToolRequest, a FindFoodsArgs) (*mcp.CallToolResult, FoodsOut, error) {

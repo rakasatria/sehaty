@@ -237,6 +237,26 @@ func RegisterTools(s *mcp.Server, d Deps, passphrase string) {
 			return ok(map[string]any{"profile": a.Profile, "minutes": a.Minutes})
 		})
 
+	mcp.AddTool(s, &mcp.Tool{Name: "find_foods",
+		Description: "Search the Indonesian food composition table (TKPI 2020) and return per-100g energy and macros for each match. Call this when someone names a food and you need its exact table entry before logging it, or when they ask what is in a food. Do NOT use it for composite dishes — the table lists ingredients, so nasi goreng and gado-gado are absent and must be logged as their parts. Returns each food's code, name, per-100g macros, its original source citation, and any verification flag meaning the value could not be confirmed across sources."},
+		func(ctx context.Context, r *mcp.CallToolRequest, a FindFoodsArgs) (*mcp.CallToolResult, FoodsOut, error) {
+			out, err := FindFoods(d, a)
+			if err != nil {
+				return nil, FoodsOut{}, err
+			}
+			return nil, out, nil
+		})
+
+	mcp.AddTool(s, &mcp.Tool{Name: "log_food",
+		Description: "Record something eaten, scaling the table's per-100g values to the portion given in grams. Call this when someone says what they ate; pass a TKPI code from find_foods when the name is not unique. Do NOT invent a food or a portion — an unrecognised name is refused rather than guessed, and an ambiguous one comes back with the candidate codes for you to choose from. Returns the saved entry with its macros and provenance; an identical entry already logged today is treated as a retry and NOT logged twice unless allow_duplicate is set."},
+		func(ctx context.Context, r *mcp.CallToolRequest, a LogFoodArgs) (*mcp.CallToolResult, LogFoodOut, error) {
+			out, err := LogFood(d, a)
+			if err != nil {
+				return nil, LogFoodOut{}, err
+			}
+			return nil, out, nil
+		})
+
 	mcp.AddTool(s, &mcp.Tool{Name: "log_weight",
 		Description: "Record body weight and report the weekly trend. Day-to-day movement is water, not fat; only the weekly rate is signal."},
 		func(ctx context.Context, r *mcp.CallToolRequest, a LogWeightArgs) (*mcp.CallToolResult, map[string]any, error) {

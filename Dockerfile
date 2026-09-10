@@ -28,6 +28,7 @@ COPY --from=build /out/sehaty /sehaty
 # Bind-mount it read-only at the path below.
 ENV SEHATY_DATA=/data \
     SEHATY_EXERCISES=/opt/sehaty/exercises.json \
+    SEHATY_FOODS=/opt/sehaty/tkpi-2020.json \
     SEHATY_MCP_HOST=0.0.0.0 \
     SEHATY_MCP_PORT=8765
 VOLUME ["/data"]

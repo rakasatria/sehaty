@@ -6,6 +6,7 @@ import (
 
 	"github.com/rakasatria/sehaty/internal/catalog"
 	"github.com/rakasatria/sehaty/internal/crypto"
+	"github.com/rakasatria/sehaty/internal/food"
 	"github.com/rakasatria/sehaty/internal/storage"
 )
 
@@ -27,7 +28,11 @@ func testDeps(t *testing.T) Deps {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return Deps{DB: db, Cat: cat, Cipher: c}
+	tbl, err := food.Load("../../data/tkpi/tkpi-2020.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return Deps{DB: db, Cat: cat, Cipher: c, Food: tbl}
 }
 
 func seed(t *testing.T, d Deps, p storage.Profile) {

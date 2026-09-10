@@ -35,12 +35,14 @@ RestartSec=15
 #                                                <profile>/<kind>/<ab>/<sha256>
 #   /etc/sehaty/key             SEHATY_KEY_FILE  0400 sehaty:sehaty — NOT backed up
 #   /opt/sehaty/exercises.json  SEHATY_EXERCISES read-only, ships with the build
+#   /opt/sehaty/tkpi-2020.json  SEHATY_FOODS      read-only, Indonesian food table
 #
 # The key is read from a FILE, not an environment variable: an env var is visible
 # in /proc/<pid>/environ and in `systemctl show`. A file is not.
 Environment=SEHATY_KEY_FILE=/etc/sehaty/key
 Environment=SEHATY_DATA=/var/lib/sehaty
 Environment=SEHATY_EXERCISES=/opt/sehaty/exercises.json
+Environment=SEHATY_FOODS=/opt/sehaty/tkpi-2020.json
 # /etc/sehaty/gocryptfs.pw (0400) unlocks media.enc and lives outside SEHATY_DATA for
 # the same reason the master key does.
 Environment=SEHATY_MCP_HOST=127.0.0.1

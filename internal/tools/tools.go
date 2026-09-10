@@ -15,6 +15,7 @@ import (
 
 	"github.com/rakasatria/sehaty/internal/catalog"
 	"github.com/rakasatria/sehaty/internal/crypto"
+	"github.com/rakasatria/sehaty/internal/food"
 	"github.com/rakasatria/sehaty/internal/guardrails"
 	"github.com/rakasatria/sehaty/internal/media"
 	"github.com/rakasatria/sehaty/internal/storage"
@@ -29,6 +30,7 @@ type Deps struct {
 	Cat    *catalog.Catalog
 	Cipher *crypto.Cipher // document bodies; never nil, the key is required at startup
 	Media  media.Store    // voice notes and meal photos; consumed from Plan 3 onward
+	Food   *food.Table    // Indonesian food composition (TKPI 2020)
 }
 
 // Goal drives sets, reps and rest. Fat loss keeps density high; strength trades volume

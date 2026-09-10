@@ -10,7 +10,7 @@ func TestOpenCreatesSchema(t *testing.T) {
 	defer db.Close()
 
 	for _, table := range []string{"profile", "identity", "training_log",
-		"cardio_log", "weight_log", "food_log", "secret_blob"} {
+		"cardio_log", "weight_log", "food_log", "document", "media"} {
 		var name string
 		err := db.QueryRow(
 			`SELECT name FROM sqlite_master WHERE type='table' AND name=?`,

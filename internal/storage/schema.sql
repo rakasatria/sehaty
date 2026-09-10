@@ -64,14 +64,38 @@ CREATE TABLE IF NOT EXISTS food_log (
   photo_hash TEXT
 );
 
-CREATE TABLE IF NOT EXISTS secret_blob (
-  profile_id TEXT NOT NULL REFERENCES profile(id),
-  key        TEXT NOT NULL,
-  ciphertext BLOB NOT NULL,
-  PRIMARY KEY (profile_id, key)
-);
 
 CREATE INDEX IF NOT EXISTS idx_training_profile_date ON training_log(profile_id, date);
 CREATE INDEX IF NOT EXISTS idx_cardio_profile_date   ON cardio_log(profile_id, date);
 CREATE INDEX IF NOT EXISTS idx_weight_profile_date   ON weight_log(profile_id, date);
 CREATE INDEX IF NOT EXISTS idx_food_profile_date     ON food_log(profile_id, date);
+
+-- Documents: versioned Markdown per profile. Replaces secret_blob, which was a flat
+-- key/value store with no history — and a nutritionist revising a plan means the old one
+-- must stay readable, because "what was I told in September" gets asked.
+CREATE TABLE IF NOT EXISTS document (
+  profile_id  TEXT NOT NULL REFERENCES profile(id),
+  key         TEXT NOT NULL,
+  version     INTEGER NOT NULL,
+  title       TEXT NOT NULL,
+  kind        TEXT NOT NULL,
+  body        BLOB NOT NULL,
+  encrypted   INTEGER NOT NULL DEFAULT 1,
+  updated_at  TEXT NOT NULL,
+  PRIMARY KEY (profile_id, key, version)
+);
+
+-- Media: metadata here, bytes in the MediaStore. Content-addressed by sha256, so the
+-- same photo sent twice stores once.
+CREATE TABLE IF NOT EXISTS media (
+  hash        TEXT PRIMARY KEY,
+  profile_id  TEXT NOT NULL REFERENCES profile(id),
+  kind        TEXT NOT NULL,
+  mime        TEXT NOT NULL,
+  bytes       INTEGER NOT NULL,
+  source      TEXT NOT NULL,
+  created_at  TEXT NOT NULL,
+  transcript  TEXT,
+  caption     TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_media_profile ON media(profile_id, created_at);

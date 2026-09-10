@@ -221,11 +221,11 @@ func NewRegistry(d tools.Deps) *Registry {
 		})
 
 	r.add("estimate_energy",
-		"Estimate how much energy they use in a day — Mifflin-St Jeor, from their age, "+
-			"height, sex, latest weight and training frequency. Returns a RANGE with its "+
-			"uncertainty. You may NOT do this arithmetic yourself; call this. It refuses "+
-			"when an input is missing, and the right response to that is to ask for the "+
-			"missing thing, never to assume it.",
+		"Estimate how much energy they use in a day — from their age, height, sex, "+
+			"latest weight and training frequency. Returns a RANGE with its uncertainty, "+
+			"and says what it had to assume. You may NOT do this arithmetic yourself; "+
+			"call this. It refuses when an input is missing, and the right response to "+
+			"that is to ask for the missing thing, never to assume it.",
 		obj(map[string]any{}),
 		func(_ context.Context, p string, _ json.RawMessage) (any, error) {
 			return tools.EstimateEnergy(r.deps, p)

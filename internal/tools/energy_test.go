@@ -194,3 +194,102 @@ func TestActivityFactorTracksFrequency(t *testing.T) {
 		prev = f
 	}
 }
+
+// The refusal must name every missing input at once. One at a time turns a single
+// question into four rounds of conversation.
+func TestTheRefusalNamesEveryMissingInputAtOnce(t *testing.T) {
+	d := testDeps(t)
+	p, err := Register(d, "probe", "refusal", "Someone", "pw", "pw")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = EstimateEnergy(d, p.ID)
+	if err == nil {
+		t.Fatal("estimated from a profile that knows nothing")
+	}
+	for _, want := range []string{"age", "height", "sex", "weight"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("the refusal does not mention %q: %v", want, err)
+		}
+	}
+	if !strings.Contains(err.Error(), "ask for it rather than assuming") {
+		t.Error("the refusal does not say what to do about it")
+	}
+}
+
+// A soft gap does not refuse. It proceeds and says what it assumed — which is the whole
+// point, because the training frequency carries most of the error in this estimate.
+func TestAnAssumedTrainingFrequencyIsReportedNotHidden(t *testing.T) {
+	d := testDeps(t)
+	p, err := Register(d, "probe", "assumed", "Someone", "pw", "pw")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := UpdateProfile(d, UpdateProfileArgs{Profile: p.ID,
+		Age: 34, HeightCm: 173, Sex: "male"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.DB.LogWeight(p.ID, storage.WeightEntry{Date: today(), WeightKg: 72.3}); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := EstimateEnergy(d, p.ID)
+	if err != nil {
+		t.Fatalf("refused despite having every hard input: %v", err)
+	}
+	if len(got.Assumed) == 0 {
+		t.Fatal("proceeded on an assumed training frequency and did not say so")
+	}
+	if !strings.Contains(strings.Join(got.Assumed, " "), "three sessions a week") {
+		t.Errorf("does not say what was assumed: %v", got.Assumed)
+	}
+
+	// Once the schedule has actually been answered there is nothing left to assume.
+	if _, err := UpdateProfile(d, UpdateProfileArgs{Profile: p.ID,
+		SessionsPerWeek: 4}); err != nil {
+		t.Fatal(err)
+	}
+	p, err = d.DB.GetProfile(p.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.MarkAnswered("training schedule")
+	if err := d.DB.SaveProfile(p); err != nil {
+		t.Fatal(err)
+	}
+	got, err = EstimateEnergy(d, p.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Assumed) != 0 {
+		t.Errorf("still reporting an assumption after it was answered: %v", got.Assumed)
+	}
+}
+
+// The equation changed at e7a1b63 and two places still named the old one. A refusal that
+// cites an equation the code does not use is a refusal nobody can check.
+func TestNothingStillClaimsMifflinStJeor(t *testing.T) {
+	d := testDeps(t)
+	p, err := Register(d, "probe", "mifflin", "Someone", "pw", "pw")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := UpdateProfile(d, UpdateProfileArgs{Profile: p.ID,
+		Age: 15, HeightCm: 160, Sex: "female"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.DB.LogWeight(p.ID, storage.WeightEntry{Date: today(), WeightKg: 50.0}); err != nil {
+		t.Fatal(err)
+	}
+	_, err = EstimateEnergy(d, p.ID)
+	if err == nil {
+		t.Fatal("estimated for someone under 18")
+	}
+	if strings.Contains(err.Error(), "Mifflin") {
+		t.Errorf("the refusal still names an equation this code does not use: %v", err)
+	}
+	if !strings.Contains(err.Error(), "paediatric dietitian") {
+		t.Errorf("the refusal no longer says who this belongs to: %v", err)
+	}
+}

@@ -169,7 +169,7 @@ func RegisterTools(s *mcp.Server, d Deps, passphrase string) {
 
 	mcp.AddTool(s, &mcp.Tool{Name: "estimate_energy",
 		Annotations: annRead(),
-		Description: "Estimate how much energy this person uses in a day, from their age, height, sex, latest recorded weight and training frequency, using the Mifflin-St Jeor equation. Returns a RANGE with its uncertainty, never a single target. Refuses if any input is missing rather than assuming one. The arithmetic happens here, not in the model."},
+		Description: "Estimate how much energy this person uses in a day, from their age, height, sex, latest recorded weight and training frequency. Returns a RANGE with its uncertainty, and says what it had to assume. Refuses if any input is missing rather than assuming one. The arithmetic happens here, not in the model."},
 		func(ctx context.Context, r *mcp.CallToolRequest, a ProfileArgs) (*mcp.CallToolResult, EnergyEstimate, error) {
 			out, err := EstimateEnergy(d, a.Profile)
 			if err != nil {

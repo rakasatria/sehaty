@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/rakasatria/sehaty/internal/capability"
 	"github.com/rakasatria/sehaty/internal/storage"
 )
 
@@ -12,18 +13,17 @@ import (
 // This is computed HERE, in Go, and never by the model. That is the same rule the
 // rest of Sehaty runs on: a language model asked to do arithmetic will produce
 // something that looks like an answer, and there is no way to tell a mistaken
-// 2,340 from a correct one by reading it. Mifflin-St Jeor is four multiplications
+// 2,340 from a correct one by reading it. The equation is four multiplications
 // and a lookup — deterministic, reproducible, and testable, which is what a
 // number in a health record has to be.
 //
-// The equation is Mifflin MD, St Jeor ST, et al., "A new predictive equation for
-// resting energy expenditure in healthy individuals", Am J Clin Nutr 1990;51:241-7.
-// It is the one most dietetic bodies use for adults, and it is a POPULATION
-// equation: it predicts a group mean. For an individual, roughly 70% of people
-// fall within ±10% of it and about 95% within ±20%, and it has not been validated
-// for pregnancy, for people under 18, or for the very lean or very heavy — which
+// Henry CJK, "Basal metabolic rate studies in humans: measurement and development
+// of new equations", Public Health Nutrition 2005;8(7A):1133-52. Chosen over
+// Mifflin-St Jeor because it removed the Italian bias in the Schofield database
+// and raised tropical representation to 38%. It has not been validated for
+// pregnancy, for people under 18, or for the very lean or very heavy — which
 // is why what comes out of here is a range with its uncertainty attached, and
-// never a target.
+// never a target. See restingRate for the full reasoning.
 
 // EnergyEstimate is a range, deliberately.
 //
@@ -45,7 +45,11 @@ type EnergyEstimate struct {
 	// that a future self-calibrated figure can say it is NOT. The equation is a prior;
 	// the weight log is the evidence.
 	Provisional bool   `json:"provisional"`
-	Equation    string `json:"equation"`
+	// Assumed names what this estimate proceeded without, in the words the person gets.
+	// An assumption nobody is told about is indistinguishable from a measurement, and
+	// the training frequency carries most of the error in this figure.
+	Assumed  []string `json:"assumed,omitempty"`
+	Equation string   `json:"equation"`
 	UsedWeigh   string `json:"weight_used"`
 }
 
@@ -146,30 +150,20 @@ func EstimateEnergy(d Deps, profileID string) (EnergyEstimate, error) {
 		return EnergyEstimate{}, err
 	}
 
-	var missing []string
-	if p.Age == 0 {
-		missing = append(missing, "age")
-	}
-	if p.HeightCm == 0 {
-		missing = append(missing, "height")
-	}
-	if p.Sex == "" {
-		missing = append(missing, "sex")
-	}
-
-	weight, weighed := latestWeight(d, profileID)
-	if !weighed {
-		missing = append(missing, "a recorded weight")
-	}
-	if len(missing) > 0 {
+	have := Have(d, p)
+	if unmet, blocked := capability.Blocked("estimate_energy", have); blocked {
 		return EnergyEstimate{}, fmt.Errorf(
 			"cannot estimate without %s — ask for it rather than assuming; an estimate "+
-				"built on a guessed input is not an estimate", joinAnd(missing))
+				"built on a guessed input is not an estimate",
+			joinAnd(readable(unmet)))
 	}
+
+	weight, _ := latestWeight(d, profileID)
+
 	if p.Age < 18 {
 		return EnergyEstimate{}, fmt.Errorf(
-			"Mifflin-St Jeor is validated for adults; for someone under 18 this needs a " +
-				"paediatric dietitian, not an equation")
+			"these equations are validated for adults; for someone under 18 this needs " +
+				"a paediatric dietitian, not an equation")
 	}
 
 	bmr, equation := restingRate(weight, p.Age, p.Sex)
@@ -260,6 +254,9 @@ func EstimateEnergy(d Deps, profileID string) (EnergyEstimate, error) {
 	if p.Goal == "fat_loss" {
 		out.ProteinG = round(weight * 2.2)
 	}
+	for _, gap := range capability.SoftGaps("estimate_energy", have) {
+		out.Assumed = append(out.Assumed, gap.Because)
+	}
 	return out, nil
 }
 
@@ -292,3 +289,20 @@ func joinAnd(items []string) string {
 }
 
 var _ = storage.Profile{}
+
+// readable turns field names into the words a person would use. "weight_log" is a
+// database concept; "a recorded weight" is the thing they are being asked for.
+func readable(rs []capability.Requirement) []string {
+	out := make([]string, 0, len(rs))
+	for _, r := range rs {
+		switch r.Field {
+		case capability.FieldWeightLog:
+			out = append(out, "a recorded weight")
+		case capability.FieldHeight:
+			out = append(out, "height")
+		default:
+			out = append(out, string(r.Field))
+		}
+	}
+	return out
+}

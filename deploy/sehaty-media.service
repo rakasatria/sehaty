@@ -1,0 +1,19 @@
+[Unit]
+Description=gocryptfs — Sehaty media (encrypts filenames as well as contents)
+Documentation=man:gocryptfs(1)
+After=local-fs.target
+Before=sehaty.service
+ConditionPathExists=/etc/sehaty/gocryptfs.pw
+ConditionPathIsDirectory=/var/lib/sehaty/media.enc
+
+[Service]
+Type=simple
+# -fg keeps gocryptfs in the foreground so systemd supervises the real process rather
+# than a daemon that has already forked away and left nothing to watch.
+ExecStart=/usr/bin/gocryptfs -fg -q -passfile /etc/sehaty/gocryptfs.pw -allow_other /var/lib/sehaty/media.enc /var/lib/sehaty/media
+ExecStopPost=-/bin/fusermount -u /var/lib/sehaty/media
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

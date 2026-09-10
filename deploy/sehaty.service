@@ -2,6 +2,12 @@
 Description=Sehaty — personal health agent (MCP)
 After=network-online.target
 Wants=network-online.target
+# The media directory is a gocryptfs mount (see sehaty-media.service). Requires=,
+# not just After=: if the mount is not up, sehaty must not start. The bare mountpoint
+# is root-owned 0500 as a second guard, so even a bypass cannot scatter files with
+# plaintext profile names onto the disk.
+Requires=sehaty-media.service
+After=sehaty-media.service
 
 [Service]
 Type=simple
@@ -19,9 +25,14 @@ RestartSec=15
 # SEHATY_KEY_FILE is found inside SEHATY_DATA.
 #
 #   /var/lib/sehaty/            SEHATY_DATA      BACKED UP (vzdump, nightly)
-#     ├── sehaty.db             SEHATY_DB        encrypted: Adiantum VFS
-#     ├── sehaty.db-wal                          encrypted (same VFS)
-#     └── media/                SEHATY_MEDIA     <profile>/<kind>/<ab>/<sha256>
+#     ├── sehaty.db             SEHATY_DB        encrypted: Adiantum VFS.
+#     ├── sehaty.db-wal                          NOT on FUSE - SQLite stays on real
+#     │                                          disk; it is already encrypted, and
+#     │                                          a userspace fs under it buys nothing.
+#     ├── media.enc/                             gocryptfs CIPHERTEXT - this is what
+#     │                                          the backup actually contains
+#     └── media/                SEHATY_MEDIA     gocryptfs PLAINTEXT VIEW (a mount)
+#                                                <profile>/<kind>/<ab>/<sha256>
 #   /etc/sehaty/key             SEHATY_KEY_FILE  0400 sehaty:sehaty — NOT backed up
 #   /opt/sehaty/exercises.json  SEHATY_EXERCISES read-only, ships with the build
 #
@@ -30,6 +41,8 @@ RestartSec=15
 Environment=SEHATY_KEY_FILE=/etc/sehaty/key
 Environment=SEHATY_DATA=/var/lib/sehaty
 Environment=SEHATY_EXERCISES=/opt/sehaty/exercises.json
+# /etc/sehaty/gocryptfs.pw (0400) unlocks media.enc and lives outside SEHATY_DATA for
+# the same reason the master key does.
 Environment=SEHATY_MCP_HOST=127.0.0.1
 Environment=SEHATY_MCP_PORT=8765
 

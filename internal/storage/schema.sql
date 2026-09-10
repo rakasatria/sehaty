@@ -8,6 +8,20 @@ CREATE TABLE IF NOT EXISTS profile (
   max_difficulty    INTEGER NOT NULL DEFAULT 3,
   limitations_json  TEXT NOT NULL DEFAULT '[]',
   display_name      TEXT NOT NULL DEFAULT '',
+  -- Who this person is, for CONTEXT. Deliberately not used to compute energy targets:
+  -- Sehaty refuses to set a calorie or macro goal at all, and having age and height on
+  -- file must not quietly become permission to start.
+  age               INTEGER NOT NULL DEFAULT 0,
+  height_cm         INTEGER NOT NULL DEFAULT 0,
+  sex               TEXT NOT NULL DEFAULT '',
+  allergies_json    TEXT NOT NULL DEFAULT '[]',
+  dislikes_json     TEXT NOT NULL DEFAULT '[]',
+  diet_notes        TEXT NOT NULL DEFAULT '',
+  diet_preference   TEXT NOT NULL DEFAULT '',
+  -- Which questions they have actually answered. Inferring this from the values does not
+  -- work: someone who genuinely trains 3 times a week is indistinguishable from someone
+  -- who never answered, because 3 is also the default — so they get asked forever.
+  answered_json     TEXT NOT NULL DEFAULT '[]',
   locale            TEXT NOT NULL DEFAULT 'en',
   created_at        TEXT NOT NULL
 );

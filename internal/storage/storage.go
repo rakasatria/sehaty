@@ -98,6 +98,14 @@ func Open(path, hexKey string) (*DB, error) {
 var migrations = []struct{ table, column, definition string }{
 	{"profile", "limitations_json", "TEXT NOT NULL DEFAULT '[]'"},
 	{"profile", "display_name", "TEXT NOT NULL DEFAULT ''"},
+	{"profile", "age", "INTEGER NOT NULL DEFAULT 0"},
+	{"profile", "height_cm", "INTEGER NOT NULL DEFAULT 0"},
+	{"profile", "sex", "TEXT NOT NULL DEFAULT ''"},
+	{"profile", "allergies_json", "TEXT NOT NULL DEFAULT '[]'"},
+	{"profile", "dislikes_json", "TEXT NOT NULL DEFAULT '[]'"},
+	{"profile", "diet_notes", "TEXT NOT NULL DEFAULT ''"},
+	{"profile", "diet_preference", "TEXT NOT NULL DEFAULT ''"},
+	{"profile", "answered_json", "TEXT NOT NULL DEFAULT '[]'"},
 }
 
 // ensureColumn adds a column if the table lacks it. Idempotent: safe on every startup.

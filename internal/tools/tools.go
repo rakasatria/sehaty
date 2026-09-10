@@ -302,9 +302,7 @@ func Register(d Deps, channel, externalID, displayName, passphrase, want string)
 	if name == "" {
 		name = "Someone"
 	}
-	p := storage.Profile{ID: id, DisplayName: name,
-		Equipment: []string{"body weight"}, Goal: "general", SessionsPerWeek: 3,
-		SessionMinutes: 50, Experience: "beginner", MaxDifficulty: 3}
+	p := freshProfile(id, name)
 	if err := d.DB.SaveProfile(p); err != nil {
 		return storage.Profile{}, err
 	}
@@ -396,6 +394,52 @@ func UpdateProfile(d Deps, a UpdateProfileArgs) (storage.Profile, error) {
 		}
 		p.SessionsPerWeek = a.SessionsPerWeek
 	}
+	if a.Age != 0 {
+		if a.Age < 13 || a.Age > 100 {
+			return p, fmt.Errorf("age must be between 13 and 100, got %d", a.Age)
+		}
+		p.Age = a.Age
+	}
+	if a.HeightCm != 0 {
+		if a.HeightCm < 100 || a.HeightCm > 230 {
+			return p, fmt.Errorf("height must be between 100 and 230 cm, got %d", a.HeightCm)
+		}
+		p.HeightCm = a.HeightCm
+	}
+	if a.Sex != "" {
+		sx := strings.ToLower(strings.TrimSpace(a.Sex))
+		if sx != "male" && sx != "female" && sx != "other" {
+			return p, fmt.Errorf("sex must be male, female or other")
+		}
+		p.Sex = sx
+	}
+	if a.Allergies != nil {
+		p.Allergies = clean(a.Allergies)
+	}
+	if a.Dislikes != nil {
+		p.Dislikes = clean(a.Dislikes)
+	}
+	if a.DietNotes != "" {
+		p.DietNotes = strings.TrimSpace(a.DietNotes)
+	}
+	if a.DietPreference != "" {
+		dp := strings.ToLower(strings.TrimSpace(a.DietPreference))
+		if dp != "vegetarian" && dp != "non_vegetarian" && dp != "vegan" {
+			return p, fmt.Errorf("diet_preference must be vegetarian, non_vegetarian or vegan")
+		}
+		p.DietPreference = dp
+	}
+
+	// A question that was put and turned down is answered. Asking it again tomorrow is
+	// how an assistant stops being useful and starts being a form that follows you around.
+	for _, q := range a.Declined {
+		if _, ok := storage.Canonical(q); !ok {
+			return p, fmt.Errorf("declined %q is not one of: %s",
+				q, strings.Join(storage.Assessment, ", "))
+		}
+		p.MarkAnswered(q)
+	}
+	p.MarkAnswered(answeredBy(a)...)
 	if a.SessionMinutes != 0 {
 		if a.SessionMinutes < 10 || a.SessionMinutes > 180 {
 			return p, fmt.Errorf("session_minutes must be 10..180, got %d", a.SessionMinutes)
@@ -445,4 +489,90 @@ func requireProfile(d Deps, id string) (storage.Profile, error) {
 	}
 	return p, fmt.Errorf("unknown profile %q; registered profiles are: %s",
 		id, strings.Join(names, ", "))
+}
+
+// clean drops blanks and trims. A list arriving from a conversation is full of stray
+// whitespace and the occasional empty string.
+func clean(in []string) []string {
+	out := make([]string, 0, len(in))
+	for _, v := range in {
+		if t := strings.TrimSpace(v); t != "" {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+// freshProfile is what someone looks like before they have told us anything.
+//
+// One definition, two callers: registration, and ResetAssessment. When they drifted apart
+// a reset would leave a profile in a state registration never produces.
+func freshProfile(id, name string) storage.Profile {
+	return storage.Profile{ID: id, DisplayName: name,
+		Equipment: []string{"body weight"}, Goal: "general", SessionsPerWeek: 3,
+		SessionMinutes: 50, Experience: "beginner", MaxDifficulty: 3}
+}
+
+// ResetAssessment puts the profile answers back to their starting state so the questions
+// can be asked again.
+//
+// It clears ANSWERS ONLY. Training, food, weight, cardio, documents and media are all
+// untouched, and so are the identity link and any issued tokens — this is somebody
+// redoing an interview, not somebody erasing their history. That distinction is the whole
+// reason this is safe enough for the assistant to call at all: the worst case is that a
+// person answers eight questions again.
+//
+// Deleting the record itself remains sehatyctl's job, where a human runs it and the blast
+// radius is visible.
+func ResetAssessment(d Deps, profileID string) (storage.Profile, error) {
+	p, err := requireProfile(d, profileID)
+	if err != nil {
+		return storage.Profile{}, err
+	}
+	fresh := freshProfile(p.ID, p.DisplayName)
+	fresh.Locale = p.Locale
+	if err := d.DB.SaveProfile(fresh); err != nil {
+		return storage.Profile{}, err
+	}
+	return fresh, nil
+}
+
+// answeredBy maps the fields this call actually set onto the questions they answer.
+//
+// It runs after validation, so a rejected value never marks its question answered — a
+// person who said "seratus tahun" has not answered the age question, and must be asked
+// again rather than left permanently unknown and permanently unasked.
+func answeredBy(a UpdateProfileArgs) []string {
+	var out []string
+	if len(a.Equipment) > 0 {
+		out = append(out, "equipment")
+	}
+	if a.Goal != "" {
+		out = append(out, "goal")
+	}
+	if a.Experience != "" {
+		out = append(out, "experience")
+	}
+	if a.SessionsPerWeek != 0 || a.SessionMinutes != 0 {
+		out = append(out, "training schedule")
+	}
+	if a.Limitations != nil {
+		out = append(out, "injuries or conditions")
+	}
+	if a.HeightCm != 0 {
+		out = append(out, "height")
+	}
+	if a.Age != 0 {
+		out = append(out, "age")
+	}
+	if a.DietPreference != "" {
+		out = append(out, "diet preference")
+	}
+	if a.Allergies != nil {
+		out = append(out, "food allergies")
+	}
+	if a.Sex != "" {
+		out = append(out, "sex")
+	}
+	return out
 }

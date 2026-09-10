@@ -67,6 +67,14 @@ type UpdateProfileArgs struct {
 	SessionsPerWeek int      `json:"sessions_per_week,omitempty" jsonschema:"1-14"`
 	SessionMinutes  int      `json:"session_minutes,omitempty" jsonschema:"10-180"`
 	MaxDifficulty   int      `json:"max_difficulty,omitempty" jsonschema:"1-5; overrides the ceiling implied by experience"`
+	Age             int      `json:"age,omitempty" jsonschema:"13-100"`
+	HeightCm        int      `json:"height_cm,omitempty" jsonschema:"height in centimetres"`
+	Sex             string   `json:"sex,omitempty" jsonschema:"male, female or other"`
+	Allergies       []string `json:"allergies,omitempty" jsonschema:"food allergies, in their own words. Replaces the whole list"`
+	Dislikes        []string `json:"dislikes,omitempty" jsonschema:"foods they will not eat. Replaces the whole list"`
+	DietPreference  string   `json:"diet_preference,omitempty" jsonschema:"vegetarian, non_vegetarian or vegan"`
+	Declined        []string `json:"declined,omitempty" jsonschema:"questions they were asked and chose not to answer, so they are not asked again"`
+	DietNotes       string   `json:"diet_notes,omitempty" jsonschema:"anything else about how they eat — fasting, vegetarian, a clinician's instruction"`
 	Limitations     []string `json:"limitations,omitempty" jsonschema:"injuries or conditions in the person's own words, e.g. bad knee, rotator cuff injury. Replaces the whole list; send an empty array to clear it"`
 }
 
@@ -142,15 +150,10 @@ func RegisterTools(s *mcp.Server, d Deps, passphrase string) {
 			if err != nil {
 				return nil, nil, err
 			}
-			return ok(map[string]any{"profile": p.ID, "goal": p.Goal,
-				"equipment": p.Equipment, "experience": p.Experience,
-				"max_difficulty": p.MaxDifficulty, "locale": p.Locale,
-				"display_name":        p.DisplayName,
-				"sessions_per_week":   p.SessionsPerWeek,
-				"available_exercises": Available(d, p),
-				"limitations":         p.Limitations,
-				"equipment_options":   d.Cat.Equipment(),
-				"prescription":        goals[p.Goal]})
+			out := profileOut(d, p)
+			out["equipment_options"] = d.Cat.Equipment()
+			out["prescription"] = goals[p.Goal]
+			return ok(out)
 		})
 
 	mcp.AddTool(s, &mcp.Tool{Name: "update_profile",
@@ -161,13 +164,20 @@ func RegisterTools(s *mcp.Server, d Deps, passphrase string) {
 			if err != nil {
 				return nil, nil, err
 			}
-			return ok(map[string]any{"profile": p.ID, "goal": p.Goal,
-				"equipment": p.Equipment, "experience": p.Experience,
-				"limitations":         p.Limitations,
-				"max_difficulty":      p.MaxDifficulty,
-				"sessions_per_week":   p.SessionsPerWeek,
-				"session_minutes":     p.SessionMinutes,
-				"available_exercises": Available(d, p)})
+			return ok(profileOut(d, p))
+		})
+
+	mcp.AddTool(s, &mcp.Tool{Name: "reset_assessment",
+		Annotations: annOverwrite(),
+		Description: "Clear a profile's answers — equipment, goal, experience, injuries, age, height, sex, allergies, dislikes, diet notes — so the questions can be asked again from the start. Logged training, food, weight, cardio, documents and media are NOT touched and cannot be deleted with this or any other tool. Confirm with the person before calling it: their previous answers are gone afterwards and can only be restored by answering again."},
+		func(ctx context.Context, r *mcp.CallToolRequest, a ProfileArgs) (*mcp.CallToolResult, map[string]any, error) {
+			p, err := ResetAssessment(d, a.Profile)
+			if err != nil {
+				return nil, nil, err
+			}
+			out := profileOut(d, p)
+			out["note"] = "Answers cleared. Nothing logged was removed."
+			return ok(out)
 		})
 
 	mcp.AddTool(s, &mcp.Tool{Name: "register",
@@ -498,4 +508,48 @@ func annAdd() *mcp.ToolAnnotations {
 func annOverwrite() *mcp.ToolAnnotations {
 	t, f := true, false
 	return &mcp.ToolAnnotations{DestructiveHint: &t, IdempotentHint: true, OpenWorldHint: &f}
+}
+
+// profileOut is the one shape a profile is reported in.
+//
+// It exists because get_profile and update_profile each built their own map, and when
+// age, height and the rest were added to storage both were missed: the tools could write
+// a field they could not then read back. One function, two callers, no drift.
+//
+// Empty fields are omitted rather than sent as zero. A model reading "age": 0 treats it
+// as an answer it already has and stops asking; an absent key reads as unknown, which is
+// the truth.
+func profileOut(d Deps, p storage.Profile) map[string]any {
+	out := map[string]any{
+		"profile": p.ID, "goal": p.Goal, "equipment": p.Equipment,
+		"experience": p.Experience, "max_difficulty": p.MaxDifficulty,
+		"locale": p.Locale, "display_name": p.DisplayName,
+		"sessions_per_week": p.SessionsPerWeek, "session_minutes": p.SessionMinutes,
+		"limitations": p.Limitations, "available_exercises": Available(d, p),
+	}
+	if p.Age > 0 {
+		out["age"] = p.Age
+	}
+	if p.HeightCm > 0 {
+		out["height_cm"] = p.HeightCm
+	}
+	if p.Sex != "" {
+		out["sex"] = p.Sex
+	}
+	if len(p.Allergies) > 0 {
+		out["allergies"] = p.Allergies
+	}
+	if len(p.Dislikes) > 0 {
+		out["dislikes"] = p.Dislikes
+	}
+	if p.DietNotes != "" {
+		out["diet_notes"] = p.DietNotes
+	}
+	if p.DietPreference != "" {
+		out["diet_preference"] = p.DietPreference
+	}
+	if len(p.Answered) > 0 {
+		out["answered"] = p.Answered
+	}
+	return out
 }

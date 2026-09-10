@@ -277,13 +277,24 @@ func RegisterTools(s *mcp.Server, d Deps, passphrase string) {
 
 	mcp.AddTool(s, &mcp.Tool{Name: "get_media",
 		Annotations: annRead(),
-		Description: "Fetch a stored photo or voice note by its hash and return the file itself, so you can look at the meal. Call this when you need to see a picture the person sent. Do NOT use what you see to invent nutrition numbers — identify the dish and confirm the portion, then get the macros from find_foods. Returns the image or audio inline; a hash belonging to another profile will not open, because each file is cryptographically bound to its owner."},
+		Description: "Fetch a stored photo or voice note by its hash and return the file itself, so you can look at the meal. Call this when you need to see a picture the person sent. Do NOT use what you see to invent nutrition numbers — identify the dish and confirm the portion, then get the macros from find_foods. Returns the image or audio inline, with photos reduced to 1024px to keep them affordable to look at; pass full when detail genuinely matters, and note a hash belonging to another profile will not open because each file is cryptographically bound to its owner."},
 		func(ctx context.Context, r *mcp.CallToolRequest, a GetMediaArgs) (*mcp.CallToolResult, struct{}, error) {
 			raw, kind, err := GetMediaBytes(d, a)
 			if err != nil {
 				return nil, struct{}{}, err
 			}
+			// Photos are REDUCED for transport. A 4000x3000 phone photo costs roughly
+			// 16,000 tokens; at 1024px it is about 1,050, and telling nasi goreng from
+			// gado-gado does not need twelve megapixels. The stored file is untouched —
+			// this shrinks the copy being sent, and `full` returns the original.
+			shrunk := false
+			if kind == media.KindPhoto && !a.Full {
+				if out, _, changed := media.Downscale(raw, a.MaxPx); changed {
+					raw, shrunk = out, true
+				}
+			}
 			mime := sniffMIME(raw, kind)
+			_ = shrunk
 			var content mcp.Content
 			if kind == media.KindVoice {
 				content = &mcp.AudioContent{Data: raw, MIMEType: mime}

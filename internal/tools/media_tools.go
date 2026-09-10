@@ -93,6 +93,8 @@ type GetMediaArgs struct {
 	Profile string `json:"profile"`
 	Kind    string `json:"kind,omitempty" jsonschema:"photo or voice; defaults to photo"`
 	Hash    string `json:"hash" jsonschema:"the content hash returned by attach_media or stored on a food entry"`
+	Full    bool   `json:"full,omitempty" jsonschema:"return the original at full resolution. Photos are reduced to 1024px by default because a 4000x3000 photo costs about 16000 tokens against 1050 — only ask for full when detail actually matters"`
+	MaxPx   int    `json:"max_px,omitempty" jsonschema:"longest edge to reduce a photo to; defaults to 1024"`
 }
 
 // sniffMIME derives the content type from the BYTES rather than from the kind.

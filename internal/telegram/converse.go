@@ -55,7 +55,16 @@ func (b *Bot) converse(ctx context.Context, chat int64, p storage.Profile, text,
 	}
 	b.typing(ctx, chat)
 
-	history := append(b.chats.get(chat), agent.Message{Role: "user", Content: text})
+	history := b.chats.get(chat)
+	if strings.TrimSpace(text) != "" {
+		history = append(history, agent.Message{Role: "user", Content: text})
+	} else if len(history) == 0 {
+		// Opening the conversation ourselves, with nothing said yet. The
+		// instruction is in the note; this turn exists because a model needs
+		// something to answer, and an empty user message is rejected outright by
+		// some providers. It is never shown to anyone.
+		history = append(history, agent.Message{Role: "user", Content: "(mulai)"})
+	}
 	brief := agent.Brief(b.Deps, p)
 	if note != "" {
 		brief += "\n\n" + note
@@ -92,6 +101,6 @@ func cannotConverse(text string) string {
 	return fmt.Sprintf(
 		"I can't hold a conversation on this server — no language model is configured, "+
 			"so “%s” goes past me.\n\nWhat still works: voice notes, meal photos, "+
-			"berat 87.4 for your weight, /me for your month and /dash for the dashboard.",
+			"berat 70.5 for your weight, /me for your month and /dash for the dashboard.",
 		text)
 }

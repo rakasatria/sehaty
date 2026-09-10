@@ -18,7 +18,7 @@ import (
 // Point is one plotted observation: the real values, and where it sits in the viewBox.
 type Point struct {
 	Date  string
-	Label string // formatted value, e.g. "87.4"
+	Label string // formatted value, e.g. "70,5"
 	Value float64
 	X, Y  float64
 }

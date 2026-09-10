@@ -30,12 +30,20 @@ func TestDisabledWithoutAToken(t *testing.T) {
 	}
 }
 
-func TestHelpCopyIsInvitingButPromisesNoGuessing(t *testing.T) {
+// The bot answers in whatever language it is written to, but this copy is static
+// and reaches someone who has so far sent nothing but a passphrase. Indonesian is
+// the right default here, and it must stay consistent with the command menu, the
+// assessment questions and the Mini App — all of which are Indonesian.
+func TestHelpCopyIsIndonesianAndPromisesNoGuessing(t *testing.T) {
 	h := help(profileFixture())
-	for _, want := range []string{"Voice notes", "photos", "/dash", "don't guess"} {
+	for _, want := range []string{"Voice note", "foto makanan", "/dash", "aku nggak nebak"} {
 		if !contains(h, want) {
 			t.Errorf("help does not mention %q", want)
 		}
+	}
+	// Two screens of text is a poor first thing to say to someone.
+	if len(h) > 700 {
+		t.Errorf("help is %d bytes — too long to read on arrival", len(h))
 	}
 }
 

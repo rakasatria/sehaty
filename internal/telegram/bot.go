@@ -75,11 +75,15 @@ func (b *Bot) Run(ctx context.Context) {
 	// help message — Telegram shows it as a tap-to-run list when someone types "/".
 	if err := tg.SetMyCommands(ctx, &telego.SetMyCommandsParams{
 		Commands: []telego.BotCommand{
+			// The menu is English because these are commands, not conversation —
+			// short, typed, and the same words people already know from every
+			// other bot. What the bot SAYS stays Indonesian. The Indonesian
+			// spellings still work; they are simply not what the menu advertises.
 			{Command: "me", Description: "Ringkasan 30 hari terakhir"},
-			{Command: "dash", Description: "Link dashboard, berlaku 1 jam"},
-			{Command: "berat", Description: "Catat berat badan — /berat 87.4"},
-			{Command: "lupakan", Description: "Lupakan obrolan ini (catatan tetap aman)"},
-			{Command: "ulang", Description: "Ulangi assessment dari awal"},
+			{Command: "dash", Description: "Buka catatanmu"},
+			{Command: "weight", Description: "Catat berat badan — /weight 70.5"},
+			{Command: "reset", Description: "Ulangi assessment dari awal"},
+			{Command: "forget", Description: "Lupakan obrolan ini (catatan tetap aman)"},
 			{Command: "help", Description: "Apa saja yang bisa aku lakukan"},
 		},
 	}); err != nil {
@@ -176,20 +180,19 @@ func (b *Bot) handle(ctx context.Context, m *telego.Message) {
 
 	lower := strings.ToLower(text)
 	switch {
-	case lower == "/start", lower == "/help", lower == "/bantuan":
+	case lower == "/start", lower == "/help":
 		b.reply(ctx, chat, help(profile))
-	case lower == "/me", lower == "/profil", lower == "/profile":
+	case lower == "/me", lower == "/profile":
 		b.reply(ctx, chat, b.summary(profile))
 	case lower == "/dash", lower == "/dashboard":
 		b.handleDashboard(ctx, chat, profile)
-	case lower == "/lupakan", lower == "/reset", lower == "/forget":
+	case lower == "/forget":
 		b.chats.forget(chat)
 		b.reply(ctx, chat, "Oke, obrolan tadi aku lupain. Catatanmu nggak kesentuh — "+
 			"yang hilang cuma benang obrolannya.")
-	case lower == "/ulang", lower == "/ulangi":
+	case lower == "/reset":
 		b.handleRestart(ctx, chat, profile)
-	case strings.HasPrefix(lower, "/berat"), strings.HasPrefix(lower, "/weight"),
-		strings.HasPrefix(lower, "berat "), strings.HasPrefix(lower, "weight "):
+	case strings.HasPrefix(lower, "/weight"):
 		b.handleWeight(ctx, chat, profile, text)
 	default:
 		// Anything else is a sentence, not a command. Note that the tools it reaches
@@ -233,29 +236,46 @@ func (b *Bot) handleUnregistered(ctx context.Context, m *telego.Message, chat in
 			b.reply(ctx, chat, "Could not register: "+err.Error())
 			return
 		}
-		// Written to set the expectation that questions are coming, that each one has
-		// a reason, and that "skip" is a whole answer — because software asking a
-		// person their age has to earn it.
+		// Short on purpose. This used to be the welcome AND the whole of help(),
+		// which arrived as two screens of English text before the person had said
+		// anything — a poor first impression of something that is meant to be
+		// unhurried. What matters here is three sentences: it is private,
+		// questions are coming, and nothing becomes a calorie target.
 		b.reply(ctx, chat, fmt.Sprintf(
-			"You're in, %s. This record is yours alone — nobody else on this server "+
-				"can read it.\n\n"+
-				"Tell me what happened — a meal, a session, this morning's weight — "+
-				"however you'd say it to a person. I keep the numbers straight and "+
-				"answer from them.\n\n"+
-				"Now and then I'll ask you something: your height, an old injury, that "+
-				"kind of thing. Always one question, always with a reason, and \"skip\" "+
-				"is a complete answer. None of it ever becomes a calorie target — that "+
-				"number belongs to your dietitian.\n\n"+
-				"Whenever something happens, tell me.\n\n%s",
-			p.DisplayName, help(p)))
+			"Halo %s. Catatan ini punyamu sendiri — nggak ada orang lain di server "+
+				"ini yang bisa baca.\n\n"+
+				"Cerita aja apa yang terjadi: makan apa, latihan apa, berat pagi ini. "+
+				"Pakai bahasamu sendiri, aku yang jaga angkanya.\n\n"+
+				"Sesekali aku nanya satu hal tentang kamu — selalu ada alasannya, dan "+
+				"\"skip\" itu jawaban yang sah. Nggak ada yang aku jadiin target "+
+				"kalori; angka itu urusan ahli gizimu.\n\n"+
+				"/help kalau mau lihat yang lain.",
+			p.DisplayName))
+
+		// And then start the assessment, immediately.
+		//
+		// The standing rule is to ask at the END of a reply that already did
+		// something useful — which is right, and which leaves a brand-new person
+		// asked nothing at all, because they have logged nothing for the bot to be
+		// useful about yet. The assessment would only begin once they happened to
+		// log something, and a plan would be built meanwhile on defaults nobody
+		// chose. First contact is the one moment where opening with a question is
+		// the considerate thing to do.
+		b.converse(ctx, chat, p, "", "This person registered SECONDS ago and has an "+
+			"empty record. The welcome has already been sent, so do not greet them "+
+			"again. Ask the FIRST question from STILL UNKNOWN now, in one short line, "+
+			"and call offer_choices for it. This is the one time you should open with "+
+			"a question: there is nothing logged yet to be useful about, and every "+
+			"suggestion until they answer rests on defaults they never chose. Say in "+
+			"a few words why you are asking before you ask.")
 		return
 	}
 	b.reply(ctx, chat,
-		"Sehaty — a private health record.\n\n"+
-			"I don't know this account yet. If someone gave you a passphrase, send it "+
-			"on its own and we'll start.\n\n"+
-			"If nobody gave you one, this server isn't yours and there's nothing here "+
-			"for you.")
+		"Sehaty — catatan kesehatan pribadi.\n\n"+
+			"Akun ini belum aku kenal. Kalau ada yang ngasih kamu passphrase, kirim "+
+			"itu aja, nanti kita mulai.\n\n"+
+			"Kalau nggak ada yang ngasih, server ini bukan punyamu dan nggak ada apa-apa "+
+			"di sini buat kamu.")
 }
 
 func (b *Bot) handleVoice(ctx context.Context, chat int64, p storage.Profile, m *telego.Message) {
@@ -376,7 +396,7 @@ func (b *Bot) handleWeight(ctx context.Context, chat int64, p storage.Profile, t
 		}
 	}
 	if !ok {
-		b.reply(ctx, chat, "Aku nggak nemu angkanya. Coba kayak gini: berat 87.4")
+		b.reply(ctx, chat, "Aku nggak nemu angkanya. Coba: /weight 70.5")
 		return
 	}
 	if err := b.Deps.DB.LogWeight(p.ID, storage.WeightEntry{
@@ -408,19 +428,20 @@ func (b *Bot) summary(p storage.Profile) string {
 }
 
 func help(p storage.Profile) string {
-	return "Mostly, just talk to me:\n\n" +
+	return "Ngomong aja biasa:\n\n" +
 		"“ayam goreng 150 gram tadi siang”\n" +
-		"“bench press 4 sets of 8 at 60 kg”\n" +
-		"“how did last week go?”\n\n" +
-		"Voice notes and photos of your food work as well. And a few shortcuts:\n\n" +
-		"• berat 87.4 — your weight this morning\n" +
-		"• /me — the last thirty days\n" +
-		"• /dash — a dashboard link, good for an hour\n" +
-		"• /ulang — start the questions over\n" +
-		"• /lupakan — forget this thread (your record stays)\n\n" +
-		"One thing worth knowing: I don't guess. If I can't tell which food you mean, " +
-		"or how much of it there was, I'll ask instead of picking something plausible. " +
-		"A health record is only worth having if every number in it is real."
+		"“bench press 4 set × 8 di 60 kg”\n" +
+		"“berat 70.5 pagi ini”\n" +
+		"“minggu kemarin gimana?”\n\n" +
+		"Voice note dan foto makanan juga bisa. Beberapa jalan pintas:\n\n" +
+		"• /weight 70.5 — catat berat badan\n" +
+		"• /me — ringkasan 30 hari\n" +
+		"• /dash — buka catatanmu\n" +
+		"• /reset — mulai pertanyaannya dari awal\n" +
+		"• /forget — lupakan obrolan ini (catatan tetap aman)\n\n" +
+		"Satu hal yang perlu kamu tau: aku nggak nebak. Kalau aku nggak yakin kamu " +
+		"maksud makanan yang mana, atau berapa banyaknya, aku nanya — bukan milih yang " +
+		"kira-kira cocok. Catatan kesehatan cuma berguna kalau semua angkanya nyata."
 }
 
 // download fetches a file's bytes.

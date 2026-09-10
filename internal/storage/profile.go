@@ -25,6 +25,9 @@ type Profile struct {
 	SessionMinutes  int
 	Experience      string
 	MaxDifficulty   int
+	// DisplayName is what a human is called. The ID is an opaque nanoid, so without this
+	// every reply would address someone as "k3f9x2mq…".
+	DisplayName string
 	// Limitations are injuries and medical conditions stated by the person, in their own
 	// words. They gate planning: see internal/guardrails.
 	Limitations []string
@@ -49,17 +52,18 @@ func (d *DB) SaveProfile(p Profile) error {
 	_, err = d.Exec(`
 		INSERT INTO profile (id, equipment_json, goal, sessions_per_week,
 		    session_minutes, experience, max_difficulty, locale, limitations_json,
-		    created_at)
-		VALUES (?,?,?,?,?,?,?,?,?,?)
+		    display_name, created_at)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?)
 		ON CONFLICT(id) DO UPDATE SET
 		    equipment_json=excluded.equipment_json, goal=excluded.goal,
 		    sessions_per_week=excluded.sessions_per_week,
 		    session_minutes=excluded.session_minutes,
 		    experience=excluded.experience,
 		    max_difficulty=excluded.max_difficulty, locale=excluded.locale,
-		    limitations_json=excluded.limitations_json`,
+		    limitations_json=excluded.limitations_json,
+		    display_name=excluded.display_name`,
 		p.ID, string(eq), p.Goal, p.SessionsPerWeek, p.SessionMinutes,
-		p.Experience, p.MaxDifficulty, p.Locale, string(lim),
+		p.Experience, p.MaxDifficulty, p.Locale, string(lim), p.DisplayName,
 		time.Now().UTC().Format(time.RFC3339))
 	if err != nil {
 		return fmt.Errorf("save profile %s: %w", p.ID, err)
@@ -73,7 +77,7 @@ func scanProfile(sc scanner) (Profile, error) {
 	var p Profile
 	var eq, lim string
 	err := sc.Scan(&p.ID, &eq, &p.Goal, &p.SessionsPerWeek, &p.SessionMinutes,
-		&p.Experience, &p.MaxDifficulty, &p.Locale, &lim)
+		&p.Experience, &p.MaxDifficulty, &p.Locale, &lim, &p.DisplayName)
 	if err != nil {
 		return p, err
 	}
@@ -87,7 +91,7 @@ func scanProfile(sc scanner) (Profile, error) {
 }
 
 const profileCols = `id, equipment_json, goal, sessions_per_week, session_minutes,
-	experience, max_difficulty, locale, limitations_json`
+	experience, max_difficulty, locale, limitations_json, display_name`
 
 func (d *DB) GetProfile(id string) (Profile, error) {
 	row := d.QueryRow(`SELECT `+profileCols+` FROM profile WHERE id=?`, id)
@@ -118,6 +122,7 @@ func (d *DB) ListProfiles() ([]Profile, error) {
 // ProfileSummary is what list_profiles returns — identity and settings, never logs.
 type ProfileSummary struct {
 	ID              string   `json:"id"`
+	DisplayName     string   `json:"display_name,omitempty"`
 	Goal            string   `json:"goal"`
 	Equipment       []string `json:"equipment"`
 	SessionsPerWeek int      `json:"sessions_per_week"`

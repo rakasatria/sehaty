@@ -70,10 +70,10 @@ type UpdateProfileArgs struct {
 }
 
 type RegisterArgs struct {
-	Channel    string `json:"channel" jsonschema:"telegram, access or mcp"`
-	ExternalID string `json:"external_id" jsonschema:"the id on that channel"`
-	Profile    string `json:"profile" jsonschema:"desired profile name, lowercase"`
-	Passphrase string `json:"passphrase" jsonschema:"the registration passphrase"`
+	Channel     string `json:"channel" jsonschema:"telegram, access or mcp"`
+	ExternalID  string `json:"external_id" jsonschema:"the id on that channel"`
+	DisplayName string `json:"display_name" jsonschema:"what this person is called, e.g. Raka. The profile id is generated, not chosen"`
+	Passphrase  string `json:"passphrase" jsonschema:"the registration passphrase"`
 }
 
 // Slice results are wrapped: an MCP output schema must be an object, and a bare slice
@@ -142,6 +142,7 @@ func RegisterTools(s *mcp.Server, d Deps, passphrase string) {
 			return ok(map[string]any{"profile": p.ID, "goal": p.Goal,
 				"equipment": p.Equipment, "experience": p.Experience,
 				"max_difficulty": p.MaxDifficulty, "locale": p.Locale,
+				"display_name":        p.DisplayName,
 				"sessions_per_week":   p.SessionsPerWeek,
 				"available_exercises": Available(d, p),
 				"limitations":         p.Limitations,
@@ -168,13 +169,16 @@ func RegisterTools(s *mcp.Server, d Deps, passphrase string) {
 
 	mcp.AddTool(s, &mcp.Tool{Name: "register",
 		Annotations: annAdd(),
-		Description: "Bind a channel account to a profile, creating it if new. Requires the registration passphrase; without the correct passphrase nothing is created."},
+		Description: "Register a person and get back their generated profile id. Call this once per person per channel, passing the passphrase they were given and the name they should be called. Do NOT choose the profile id — it is generated and unguessable, because the server has no authentication and a guessable id would be the only thing protecting one person's health data from another. Returns the profile id to use in every other tool; calling it again for an account that is already registered returns the same profile rather than creating a second."},
 		func(ctx context.Context, r *mcp.CallToolRequest, a RegisterArgs) (*mcp.CallToolResult, map[string]any, error) {
-			id, err := Register(d, a.Channel, a.ExternalID, a.Profile, a.Passphrase, passphrase)
+			p, err := Register(d, a.Channel, a.ExternalID, a.DisplayName, a.Passphrase, passphrase)
 			if err != nil {
 				return nil, nil, err
 			}
-			return ok(map[string]any{"profile": id, "channel": a.Channel})
+			return ok(map[string]any{"profile": p.ID, "display_name": p.DisplayName,
+				"channel": a.Channel,
+				"note": "Use this profile id in every other tool. It is generated and " +
+					"unguessable — record it; there is no way to look it up by name."})
 		})
 
 	mcp.AddTool(s, &mcp.Tool{Name: "find_exercises",

@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS profile (
   experience        TEXT NOT NULL DEFAULT 'beginner',
   max_difficulty    INTEGER NOT NULL DEFAULT 3,
   limitations_json  TEXT NOT NULL DEFAULT '[]',
+  display_name      TEXT NOT NULL DEFAULT '',
   locale            TEXT NOT NULL DEFAULT 'en',
   created_at        TEXT NOT NULL
 );

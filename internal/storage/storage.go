@@ -97,6 +97,7 @@ func Open(path, hexKey string) (*DB, error) {
 // precisely the state srvdev01 would have been in.
 var migrations = []struct{ table, column, definition string }{
 	{"profile", "limitations_json", "TEXT NOT NULL DEFAULT '[]'"},
+	{"profile", "display_name", "TEXT NOT NULL DEFAULT ''"},
 }
 
 // ensureColumn adds a column if the table lacks it. Idempotent: safe on every startup.

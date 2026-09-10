@@ -266,28 +266,45 @@ func FindExercises(d Deps, profileID, muscle string, limit int) ([]catalog.Exerc
 // Register binds an external account to a profile, creating the profile if new.
 // The passphrase is the registration gate — see spec §8c. It is compared in full and
 // a mismatch reveals nothing about how close the attempt was.
-func Register(d Deps, channel, externalID, profileID, passphrase, want string) (string, error) {
+func Register(d Deps, channel, externalID, displayName, passphrase, want string) (storage.Profile, error) {
 	if want == "" {
-		return "", fmt.Errorf("registration is closed: no passphrase configured")
+		return storage.Profile{}, fmt.Errorf("registration is closed: no passphrase configured")
 	}
 	if passphrase != want {
-		return "", fmt.Errorf("incorrect passphrase")
+		return storage.Profile{}, fmt.Errorf("incorrect passphrase")
 	}
-	if !storage.ValidID(profileID) {
-		return "", fmt.Errorf("profile id must be lowercase letters, digits, - or _")
+	if strings.TrimSpace(channel) == "" || strings.TrimSpace(externalID) == "" {
+		return storage.Profile{}, fmt.Errorf("channel and external_id are both required")
 	}
-	if _, err := requireProfile(d, profileID); err != nil {
-		if err := d.DB.SaveProfile(storage.Profile{ID: profileID,
-			Equipment: []string{"body weight"}, Goal: "general", SessionsPerWeek: 3,
-			SessionMinutes: 50, Experience: "beginner", MaxDifficulty: 3,
-			Locale: "en"}); err != nil {
-			return "", err
-		}
+
+	// Idempotent: an account that is already linked gets its existing profile back. A
+	// retry — or a second registration attempt by the same person — must not mint a
+	// duplicate profile and orphan the first one's history.
+	if existing, err := d.DB.ResolveIdentity(channel, externalID); err == nil {
+		return d.DB.GetProfile(existing)
 	}
-	if err := d.DB.LinkIdentity(channel, externalID, profileID); err != nil {
-		return "", err
+
+	// The id is GENERATED, never chosen. The server has no authentication, so the id is
+	// the access control: anything reaching the port can name any profile it can guess,
+	// and a chosen name like "raka" is guessable.
+	id, err := storage.NewProfileID()
+	if err != nil {
+		return storage.Profile{}, err
 	}
-	return profileID, nil
+	name := strings.TrimSpace(displayName)
+	if name == "" {
+		name = "Someone"
+	}
+	p := storage.Profile{ID: id, DisplayName: name,
+		Equipment: []string{"body weight"}, Goal: "general", SessionsPerWeek: 3,
+		SessionMinutes: 50, Experience: "beginner", MaxDifficulty: 3}
+	if err := d.DB.SaveProfile(p); err != nil {
+		return storage.Profile{}, err
+	}
+	if err := d.DB.LinkIdentity(channel, externalID, id); err != nil {
+		return storage.Profile{}, err
+	}
+	return p, nil
 }
 
 // experienceCap maps stated experience onto a difficulty ceiling. Someone calling

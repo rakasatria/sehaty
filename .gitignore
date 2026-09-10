@@ -1,0 +1,6 @@
+*.csv
+sehaty
+/media/
+*.db
+*.db-shm
+*.db-wal

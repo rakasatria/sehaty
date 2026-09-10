@@ -92,3 +92,52 @@ func TestKnownDetailIsPassedOn(t *testing.T) {
 		}
 	}
 }
+
+// Every question in the brief arrives with the reason it is being asked. A reason
+// derived from the tool that needs the field is true by construction; a reason the model
+// composes is only as true as the sentence it happens to produce.
+func TestEveryUnknownCarriesItsReason(t *testing.T) {
+	got := Brief(tools.Deps{}, storage.Profile{DisplayName: "Raka"})
+	list := got[strings.Index(got, "STILL UNKNOWN"):]
+
+	for _, want := range []string{
+		"only uses things you actually have",
+		"pitched where you are",
+		"aggravates it",
+		"Recovery and pacing shift with age",
+	} {
+		if !strings.Contains(list, want) {
+			t.Errorf("the unknown list does not carry the reason %q", want)
+		}
+	}
+}
+
+// The gate on the intrusive questions still applies outside the first consultation, and
+// is still relaxed inside it.
+func TestGatedQuestionsKeepTheirMoment(t *testing.T) {
+	got := Brief(tools.Deps{}, storage.Profile{DisplayName: "Raka"})
+	if !strings.Contains(got, "only when a weight has just been logged") {
+		t.Error("height lost the moment it belongs to")
+	}
+	if !strings.Contains(got, "the moment-gating above is relaxed") {
+		t.Error("the first consultation no longer relaxes the gating")
+	}
+}
+
+// The reason the intake exists is the estimate, and what it is still short of comes
+// from the tool itself rather than a second list kept beside it.
+func TestTheEnergyInputsComeFromTheTool(t *testing.T) {
+	got := Brief(tools.Deps{}, storage.Profile{DisplayName: "Raka"})
+	if !strings.Contains(got, "Still needed before you can estimate their energy") {
+		t.Fatal("the brief no longer leads with the energy inputs")
+	}
+	head := got[strings.Index(got, "Still needed"):]
+	if i := strings.Index(head, "\n"); i > 0 {
+		head = head[:i]
+	}
+	for _, want := range []string{"age", "height", "sex", "weight"} {
+		if !strings.Contains(head, want) {
+			t.Errorf("the energy-input line omits %q: %q", want, head)
+		}
+	}
+}

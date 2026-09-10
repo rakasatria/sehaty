@@ -59,17 +59,11 @@ func Brief(d tools.Deps, p storage.Profile) string {
 		}
 	}
 
-	// The intake needs a weight, which is not a profile field — it is logged, and
-	// the energy equation cannot run without one.
-	weighed := false
-	if d.DB != nil {
-		if ws, err := d.DB.Weights(p.ID, 3650); err == nil && len(ws) > 0 {
-			weighed = true
-		}
-	}
+	have := tools.Have(d, p)
+	unmet, blocked := capability.Blocked("estimate_energy", have)
+	toAsk := capability.ToAsk(have, p.Asked())
 
-	missing := p.Missing()
-	if len(missing) == 0 && weighed {
+	if !blocked && len(toAsk) == 0 {
 		s.WriteString("\nCONSULTATION COMPLETE. You know everything you need. Do not ask " +
 			"profile questions any more; just help, and log what they tell you.\n")
 		return s.String()
@@ -79,47 +73,50 @@ func Brief(d tools.Deps, p storage.Profile) string {
 	// and the brief says which are in force so the prompt does not have to guess.
 	s.WriteString("\nYOU ARE IN THE FIRST CONSULTATION — the intake is not finished.\n")
 
-	canEstimate := p.Age > 0 && p.HeightCm > 0 && p.Sex != "" && weighed
-	if canEstimate {
+	if !blocked {
 		s.WriteString("\nYou now have age, height, sex and a weight. Before asking anything " +
 			"else, call estimate_energy and give them the result — that is what they have " +
 			"been answering questions FOR, and it should arrive as soon as it can be earned " +
 			"rather than at the end. Then carry on with what is still missing.\n")
 	} else {
 		need := []string{}
-		if p.Age == 0 {
-			need = append(need, "age")
-		}
-		if p.HeightCm == 0 {
-			need = append(need, "height")
-		}
-		if p.Sex == "" {
-			need = append(need, "sex")
-		}
-		if !weighed {
-			need = append(need, "a current weight")
+		for _, r := range unmet {
+			if r.Field == capability.FieldWeightLog {
+				need = append(need, "a current weight")
+				continue
+			}
+			need = append(need, string(r.Field))
 		}
 		fmt.Fprintf(&s, "\nStill needed before you can estimate their energy: %s. "+
 			"These come first — the estimate is the point of the intake.\n",
 			strings.Join(need, ", "))
 	}
 
-	if len(missing) > 0 {
-		s.WriteString("\nSTILL UNKNOWN, in the order to ask:\n")
-		for i, f := range missing {
-			if q, ok := capability.Ask(capability.Field(f)); ok && q.Gate != "" && !canEstimate {
-				fmt.Fprintf(&s, "  %d. %s — %s\n", i+1, f, q.Gate)
+	if len(toAsk) > 0 {
+		s.WriteString("\nSTILL UNKNOWN, in the order to ask. The reason after each one is " +
+			"the true reason — give it if they ask why, and never invent a different one:\n")
+		for i, r := range toAsk {
+			q, _ := capability.Ask(r.Field)
+			if q.Gate != "" && blocked {
+				fmt.Fprintf(&s, "  %d. %s — %s — %s\n", i+1, r.Field, q.Gate, r.Because)
 				continue
 			}
-			fmt.Fprintf(&s, "  %d. %s\n", i+1, f)
+			fmt.Fprintf(&s, "  %d. %s — %s\n", i+1, r.Field, r.Because)
 		}
 		s.WriteString("During the first consultation the moment-gating above is relaxed: " +
 			"they came to be assessed, so height and the rest may be asked directly.\n")
 	}
-	if !weighed {
-		s.WriteString("\nThey have never been weighed. Ask for a current weight and log it " +
-			"with log_weight.\n")
+
+	if blocked {
+		for _, r := range unmet {
+			if r.Field == capability.FieldWeightLog {
+				s.WriteString("\nThey have never been weighed. Ask for a current weight and " +
+					"log it with log_weight.\n")
+				break
+			}
+		}
 	}
+
 	s.WriteString("\nAsk the NEXT question as soon as they answer the last one — do not wait " +
 		"for something useful to do first, and do not pad between questions. One question " +
 		"per message still, buttons where offer_choices has them, and skip is always a " +

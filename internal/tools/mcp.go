@@ -138,7 +138,7 @@ func RegisterTools(s *mcp.Server, d Deps, passphrase string) {
 		Annotations: annRead(),
 		Description: "One profile's settings, plus how many exercises their equipment allows."},
 		func(ctx context.Context, r *mcp.CallToolRequest, a ProfileArgs) (*mcp.CallToolResult, map[string]any, error) {
-			p, err := d.DB.GetProfile(a.Profile)
+			p, err := requireProfile(d, a.Profile)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -418,7 +418,17 @@ func RegisterTools(s *mcp.Server, d Deps, passphrase string) {
 func Serve(addr string, d Deps, passphrase string) error {
 	srv := mcp.NewServer(&mcp.Implementation{Name: "sehaty", Version: "0.1.0"}, nil)
 	RegisterTools(srv, d, passphrase)
-	h := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return srv }, nil)
+	// The SDK defaults MaxRequestBodyBytes to 4 MiB. Base64 inflates a file by 4/3, so
+	// that default rejected any photo over roughly 3 MB with an opaque HTTP 413 — while
+	// the media store itself accepts 25 MiB. A real phone photo is 2-5 MB, so the
+	// feature was broken for its actual purpose.
+	//
+	// Derived from the media cap rather than hardcoded, so the two cannot drift. The
+	// APPLICATION limit should be what refuses an oversized upload, with a message
+	// naming the limit; the transport limit is only a backstop.
+	h := mcp.NewStreamableHTTPHandler(
+		func(*http.Request) *mcp.Server { return srv },
+		&mcp.StreamableHTTPOptions{MaxRequestBodyBytes: MaxRequestBody})
 	mux := http.NewServeMux()
 	mux.Handle("/mcp", h)
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
@@ -433,6 +443,10 @@ func Serve(addr string, d Deps, passphrase string) error {
 // clients parallelise read-only tools and relax approval prompts for them.
 //
 // Every tool here is closed-world: the server touches only its own store.
+// MaxRequestBody is the transport ceiling: the largest blob the media store will accept,
+// grown by the 4/3 base64 expansion, plus room for the JSON envelope around it.
+const MaxRequestBody = media.DefaultMaxBytes*4/3 + (2 << 20)
+
 func annRead() *mcp.ToolAnnotations {
 	f := false
 	return &mcp.ToolAnnotations{ReadOnlyHint: true, IdempotentHint: true, OpenWorldHint: &f}

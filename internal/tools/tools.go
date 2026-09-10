@@ -14,6 +14,7 @@ import (
 
 	"github.com/rakasatria/sehaty/internal/catalog"
 	"github.com/rakasatria/sehaty/internal/crypto"
+	"github.com/rakasatria/sehaty/internal/media"
 	"github.com/rakasatria/sehaty/internal/storage"
 )
 
@@ -24,7 +25,8 @@ func today() string { return time.Now().Format("2006-01-02") }
 type Deps struct {
 	DB     *storage.DB
 	Cat    *catalog.Catalog
-	Cipher *crypto.Cipher // may be nil: unencrypted documents still work
+	Cipher *crypto.Cipher // document bodies; never nil, the key is required at startup
+	Media  media.Store    // voice notes and meal photos; consumed from Plan 3 onward
 }
 
 // Goal drives sets, reps and rest. Fat loss keeps density high; strength trades volume

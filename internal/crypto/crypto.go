@@ -30,16 +30,24 @@ type Cipher struct{ aead cipher.AEAD }
 // New builds a Cipher from a base64 key. The key must decode to exactly 32 bytes; a
 // short key is rejected loudly rather than silently padded, because silent padding is
 // how "encrypted" data ends up trivially breakable.
-func New(b64 string) (*Cipher, error) {
+// New builds the DOCUMENT cipher.
+func New(b64 string) (*Cipher, error) { return newWithInfo(b64, infoDocs) }
+
+// NewMedia builds the MEDIA cipher — a third subkey, independent of the document and
+// database keys. Media lives OUTSIDE the database file, so the Adiantum VFS does not
+// reach it; without this, a meal photo on disk would be a plain JPEG.
+func NewMedia(b64 string) (*Cipher, error) { return newWithInfo(b64, infoMedia) }
+
+func newWithInfo(b64, info string) (*Cipher, error) {
 	master, err := decodeMaster(b64)
 	if err != nil {
 		return nil, err
 	}
-	// NOT the master key itself: documents get their own HKDF subkey so that the
-	// database-file cipher and this one never share bytes. See derive.go.
-	key, err := derive(master, infoDocs)
+	// NOT the master key itself: each cipher gets its own HKDF subkey so that no two
+	// constructions ever share bytes. See derive.go.
+	key, err := derive(master, info)
 	if err != nil {
-		return nil, fmt.Errorf("derive document key: %w", err)
+		return nil, fmt.Errorf("derive %s: %w", info, err)
 	}
 	block, err := aes.NewCipher(key)
 	if err != nil {

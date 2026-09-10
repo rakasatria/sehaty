@@ -17,8 +17,9 @@ import (
 //
 // The labels are versioned: bumping one rotates that subkey without disturbing the other.
 const (
-	infoDB   = "sehaty:db:adiantum:v1"
-	infoDocs = "sehaty:doc:aes256gcm:v1"
+	infoDB    = "sehaty:db:adiantum:v1"
+	infoDocs  = "sehaty:doc:aes256gcm:v1"
+	infoMedia = "sehaty:media:aes256gcm:v1"
 )
 
 // decodeMaster validates SEHATY_KEY and returns the raw master key.

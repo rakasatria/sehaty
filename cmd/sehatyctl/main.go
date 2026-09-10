@@ -51,7 +51,8 @@ func main() {
 			"  sehatyctl token issue <profile-id|--admin> [label]\n"+
 			"  sehatyctl token list\n"+
 			"  sehatyctl token revoke <token-id>\n"+
-			"  sehatyctl token reset <profile-id>   (revoke every token for one person)")
+			"  sehatyctl token reset <profile-id>   (revoke every token for one person)\n"+
+			"  sehatyctl chat <profile-id> [message] (the Telegram conversation, on a terminal)")
 		os.Exit(2)
 	}
 
@@ -63,6 +64,12 @@ func main() {
 	defer db.Close()
 
 	switch args[0] {
+	case "chat":
+		// Same agent, same brief, same tools as Telegram — just without the chat app.
+		if err := chatCmd(db, args[1:]); err != nil {
+			fail(err)
+		}
+
 	case "profiles":
 		ps, err := db.ListProfiles()
 		if err != nil {

@@ -15,12 +15,12 @@ package food
 
 import (
 	"encoding/json"
+
 	"fmt"
+	"github.com/blevesearch/bleve/v2"
 	"os"
-	"sort"
 	"strings"
 	"sync"
-	"unicode"
 )
 
 type Nutrient struct {
@@ -49,8 +49,6 @@ type Food struct {
 	NameEN     string `json:"name_en,omitempty"`
 	NameENFrom string `json:"name_en_source,omitempty"`
 	named      bool
-
-	haystack string // lowercased searchable text, rebuilt when an alias lands
 }
 
 // Named reports whether this food has been considered for an English name. A food can be
@@ -101,6 +99,7 @@ type Table struct {
 	all     []Food
 	byCode  map[string]Food
 	flagged int
+	index   bleve.Index
 }
 
 // SetAlias attaches an English name to a food and rebuilds its search text.
@@ -118,8 +117,11 @@ func (t *Table) SetAlias(code, nameEN, source string) bool {
 		t.all[i].NameEN = strings.TrimSpace(nameEN)
 		t.all[i].NameENFrom = source
 		t.all[i].named = true
-		t.all[i].haystack = haystackFor(t.all[i])
 		t.byCode[code] = t.all[i]
+		// Reindex so the new English name is searchable immediately, not after a restart.
+		if t.index != nil {
+			_ = t.index.Index(code, docFor(t.all[i]))
+		}
 		return true
 	}
 	return false
@@ -156,10 +158,6 @@ func (t *Table) NamedCount() int {
 	return n
 }
 
-func haystackFor(f Food) string {
-	return strings.ToLower(f.NameID + " " + f.NameFull + " " + f.Group + " " + f.NameEN)
-}
-
 type document struct {
 	Dataset   string `json:"dataset"`
 	Publisher string `json:"publisher"`
@@ -180,7 +178,6 @@ func Load(path string) (*Table, error) {
 	for _, f := range doc.Foods {
 		// Both names are searched: TKPI carries the Indonesian name and an English gloss,
 		// and a person logging in Bahasa or in English should find the same row.
-		f.haystack = haystackFor(f)
 		t.all = append(t.all, f)
 		t.byCode[strings.ToUpper(f.Code)] = f
 		if !f.Verified() {
@@ -190,6 +187,20 @@ func Load(path string) (*Table, error) {
 	if len(t.all) == 0 {
 		return nil, fmt.Errorf("food table %s contains no foods", path)
 	}
+	idx, err := newIndex()
+	if err != nil {
+		return nil, err
+	}
+	batch := idx.NewBatch()
+	for _, f := range t.all {
+		if err := batch.Index(strings.ToUpper(f.Code), docFor(f)); err != nil {
+			return nil, fmt.Errorf("index %s: %w", f.Code, err)
+		}
+	}
+	if err := idx.Batch(batch); err != nil {
+		return nil, fmt.Errorf("build index: %w", err)
+	}
+	t.index = idx
 	return t, nil
 }
 
@@ -209,84 +220,4 @@ func (t *Table) ByCode(code string) (Food, bool) {
 	defer t.mu.RUnlock()
 	f, ok := t.byCode[strings.ToUpper(strings.TrimSpace(code))]
 	return f, ok
-}
-
-// tokenize splits a query into lowercase word tokens, dropping punctuation. TKPI names are
-// comma-heavy ("Beras giling, mentah (Rice, raw)"), so matching on raw substrings misses
-// obvious hits.
-func tokenize(s string) []string {
-	fields := strings.FieldsFunc(strings.ToLower(s), func(r rune) bool {
-		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
-	})
-	out := fields[:0]
-	for _, f := range fields {
-		if len(f) > 1 {
-			out = append(out, f)
-		}
-	}
-	return out
-}
-
-// Search returns foods matching every token in the query, best first.
-//
-// EVERY token must match. A query is an attempt to name one food, so returning rows that
-// match only part of it hands the caller a plausible wrong answer — which for nutrition
-// data is worse than returning nothing.
-func (t *Table) Search(query string, limit int) []Food {
-	tokens := tokenize(query)
-	if len(tokens) == 0 {
-		return nil
-	}
-	type hit struct {
-		f     Food
-		score int
-	}
-	t.mu.RLock()
-	defer t.mu.RUnlock()
-	var hits []hit
-	for _, f := range t.all {
-		score, ok := 0, true
-		for _, tok := range tokens {
-			if !strings.Contains(f.haystack, tok) {
-				ok = false
-				break
-			}
-			// A token starting a word beats one buried mid-word.
-			if strings.HasPrefix(f.haystack, tok) || strings.Contains(f.haystack, " "+tok) {
-				score += 3
-			} else {
-				score++
-			}
-		}
-		if !ok {
-			continue
-		}
-		// A food whose name BEGINS with the query is far more likely to be what was
-		// meant than one that merely mentions it. Without this, "tempe" ranked
-		// "Keripik tempe" — fried chips at 581 kcal — above tempe itself at 150-201.
-		if strings.HasPrefix(strings.ToLower(f.NameID), tokens[0]) {
-			score += 10
-		}
-		// Shorter names are more likely to be the plain form of the food rather than a
-		// heavily qualified variant.
-		score = score*100 - len(f.NameID)
-		if f.Verified() {
-			score += 20 // prefer a row every source agreed on
-		}
-		hits = append(hits, hit{f, score})
-	}
-	sort.SliceStable(hits, func(i, j int) bool {
-		if hits[i].score != hits[j].score {
-			return hits[i].score > hits[j].score
-		}
-		return hits[i].f.Code < hits[j].f.Code
-	})
-	if limit <= 0 || limit > len(hits) {
-		limit = len(hits)
-	}
-	out := make([]Food, 0, limit)
-	for _, h := range hits[:limit] {
-		out = append(out, h.f)
-	}
-	return out
 }

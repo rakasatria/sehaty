@@ -76,6 +76,9 @@ func TestEnglishSearchIsPartialByDesign(t *testing.T) {
 	if got := tab.Search("rice", 5); len(got) == 0 {
 		t.Error(`Search("rice") found nothing; some rows do carry an English gloss`)
 	}
+	// Note: fuzziness means some English terms DO match by accident — "tempeh" reaches
+	// "tempe" one edit away. That is harmless and useful. "tofu" is two edits from "tahu",
+	// so it stays out of reach until an alias is set.
 	if got := tab.Search("tofu", 5); len(got) != 0 {
 		t.Errorf(`Search("tofu") returned %d results — the table has no English for tahu, `+
 			`so a hit here means matching has become too loose`, len(got))
@@ -164,5 +167,45 @@ func TestSearchPrefersNamesThatBeginWithTheQuery(t *testing.T) {
 	}
 	if strings.Contains(first, "keripik") || strings.Contains(first, "kerupik") {
 		t.Errorf("top hit for 'tempe' is a crisp/chip variant (%q)", got[0].NameID)
+	}
+}
+
+// The reason for taking on bleve: a slip should still find the food. The hand-rolled
+// matcher this replaced required exact substrings, so one wrong letter found nothing.
+func TestSearchToleratesASingleTypo(t *testing.T) {
+	tab := load(t)
+	for _, tc := range []struct{ typo, want string }{
+		{"tempo", "tempe"},  // e -> o
+		{"berass", "beras"}, // doubled letter
+		{"tahi", "tahu"},    // u -> i
+	} {
+		got := tab.Search(tc.typo, 5)
+		if len(got) == 0 {
+			t.Errorf("Search(%q) found nothing; a single typo should still reach %q",
+				tc.typo, tc.want)
+			continue
+		}
+		var hit bool
+		for _, f := range got {
+			if strings.Contains(strings.ToLower(f.NameID), tc.want) {
+				hit = true
+				break
+			}
+		}
+		if !hit {
+			t.Errorf("Search(%q) returned %q first; expected something containing %q",
+				tc.typo, got[0].NameID, tc.want)
+		}
+	}
+}
+
+// Fuzziness must not become a licence to guess. Two edits away is a different word.
+func TestFuzzinessDoesNotReachUnrelatedFoods(t *testing.T) {
+	tab := load(t)
+	if got := tab.Search("zzzqqxnotafood", 5); len(got) != 0 {
+		t.Errorf("nonsense matched %d foods: %q", len(got), got[0].NameID)
+	}
+	if got := tab.Search("automobile", 5); len(got) != 0 {
+		t.Errorf("an unrelated English word matched %d foods: %q", len(got), got[0].NameID)
 	}
 }

@@ -7,23 +7,27 @@ import (
 
 func TestNameFoodsMakesEnglishSearchWork(t *testing.T) {
 	d := foodDeps(t)
-	if got := d.Food.Search("tempeh", 5); len(got) != 0 {
-		t.Fatalf("'tempeh' already matched %d foods before naming", len(got))
+	// "curd" is used deliberately: no Indonesian name in the table is within one edit of
+	// it, so fuzzy matching cannot reach it. ("tempeh" would be a bad probe — bleve
+	// matches it to "tempe" one edit away, so English partly works there by accident.)
+	const probe = "curd"
+	if got := d.Food.Search(probe, 5); len(got) != 0 {
+		t.Fatalf("%q already matched %d foods before naming", probe, len(got))
 	}
 	out, err := NameFoods(d, NameFoodsArgs{Entries: []FoodNameEntry{
-		{Code: "CP077", NameEN: "soybean tempeh, raw"}}})
+		{Code: "CP061", NameEN: "bean curd (tofu), raw"}}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if out.Saved != 1 {
 		t.Fatalf("saved %d", out.Saved)
 	}
-	got := d.Food.Search("tempeh", 5)
+	got := d.Food.Search(probe, 5)
 	if len(got) == 0 {
-		t.Fatal("'tempeh' still finds nothing after naming CP077")
+		t.Fatalf("%q still finds nothing after naming CP061", probe)
 	}
-	if got[0].Code != "CP077" {
-		t.Errorf("top hit is %s, want CP077", got[0].Code)
+	if got[0].Code != "CP061" {
+		t.Errorf("top hit is %s, want CP061", got[0].Code)
 	}
 }
 
@@ -81,7 +85,7 @@ func TestNameFoodsHandsBackWorkWhenCalledEmpty(t *testing.T) {
 func TestNameFoodsPersistsAcrossReload(t *testing.T) {
 	d := foodDeps(t)
 	if _, err := NameFoods(d, NameFoodsArgs{Entries: []FoodNameEntry{
-		{Code: "CP077", NameEN: "soybean tempeh"}}, Source: "user"}); err != nil {
+		{Code: "CP077", NameEN: "soybean curd cake"}}, Source: "user"}); err != nil {
 		t.Fatal(err)
 	}
 	// A fresh table, as a restart would produce.
@@ -94,7 +98,7 @@ func TestNameFoodsPersistsAcrossReload(t *testing.T) {
 	if n != 1 {
 		t.Fatalf("reapplied %d aliases, want 1", n)
 	}
-	got := fresh.Food.Search("tempeh", 3)
+	got := fresh.Food.Search("curd", 3)
 	if len(got) == 0 || got[0].Code != "CP077" {
 		t.Error("alias did not survive the reload")
 	}
@@ -102,7 +106,7 @@ func TestNameFoodsPersistsAcrossReload(t *testing.T) {
 	if f.NameENFrom != "user" {
 		t.Errorf("provenance lost on reload: %q", f.NameENFrom)
 	}
-	if !strings.Contains(strings.ToLower(f.NameEN), "tempeh") {
+	if !strings.Contains(strings.ToLower(f.NameEN), "curd") {
 		t.Errorf("name lost on reload: %q", f.NameEN)
 	}
 }

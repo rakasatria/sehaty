@@ -44,13 +44,13 @@ type EnergyEstimate struct {
 	// Provisional is always true today, and is here so the client can say so and so
 	// that a future self-calibrated figure can say it is NOT. The equation is a prior;
 	// the weight log is the evidence.
-	Provisional bool   `json:"provisional"`
+	Provisional bool `json:"provisional"`
 	// Assumed names what this estimate proceeded without, in the words the person gets.
 	// An assumption nobody is told about is indistinguishable from a measurement, and
 	// the training frequency carries most of the error in this figure.
-	Assumed  []string `json:"assumed,omitempty"`
-	Equation string   `json:"equation"`
-	UsedWeigh   string `json:"weight_used"`
+	Assumed   []string `json:"assumed,omitempty"`
+	Equation  string   `json:"equation"`
+	UsedWeigh string   `json:"weight_used"`
 }
 
 // maxDailyDeficit is the absolute ceiling, in kcal/day, regardless of body size.

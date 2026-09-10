@@ -180,6 +180,12 @@ func (t *Table) Search(query string, limit int) []Food {
 		if !ok {
 			continue
 		}
+		// A food whose name BEGINS with the query is far more likely to be what was
+		// meant than one that merely mentions it. Without this, "tempe" ranked
+		// "Keripik tempe" — fried chips at 581 kcal — above tempe itself at 150-201.
+		if strings.HasPrefix(strings.ToLower(f.NameID), tokens[0]) {
+			score += 10
+		}
 		// Shorter names are more likely to be the plain form of the food rather than a
 		// heavily qualified variant.
 		score = score*100 - len(f.NameID)

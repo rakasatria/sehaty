@@ -148,3 +148,21 @@ func TestFlaggedFoodsCarryTheirFlags(t *testing.T) {
 		t.Errorf("%s is unverified but reports no flags", flagged.Code)
 	}
 }
+
+// "tempe" must not surface fried tempe chips first. The chips are 581 kcal against 150-201
+// for tempe itself, so an agent taking the top hit would log nearly four times the energy.
+func TestSearchPrefersNamesThatBeginWithTheQuery(t *testing.T) {
+	tab := load(t)
+	got := tab.Search("tempe", 5)
+	if len(got) == 0 {
+		t.Fatal("no results for tempe")
+	}
+	first := strings.ToLower(got[0].NameID)
+	if !strings.HasPrefix(first, "tempe") {
+		t.Errorf("top hit for 'tempe' is %q; a name starting with the query should win",
+			got[0].NameID)
+	}
+	if strings.Contains(first, "keripik") || strings.Contains(first, "kerupik") {
+		t.Errorf("top hit for 'tempe' is a crisp/chip variant (%q)", got[0].NameID)
+	}
+}

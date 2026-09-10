@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/rakasatria/sehaty/internal/capability"
 	"github.com/rakasatria/sehaty/internal/catalog"
 	"github.com/rakasatria/sehaty/internal/crypto"
 	"github.com/rakasatria/sehaty/internal/food"
@@ -433,9 +434,9 @@ func UpdateProfile(d Deps, a UpdateProfileArgs) (storage.Profile, error) {
 	// A question that was put and turned down is answered. Asking it again tomorrow is
 	// how an assistant stops being useful and starts being a form that follows you around.
 	for _, q := range a.Declined {
-		if _, ok := storage.Canonical(q); !ok {
+		if _, ok := capability.Canonical(q); !ok {
 			return p, fmt.Errorf("declined %q is not one of: %s",
-				q, strings.Join(storage.Assessment, ", "))
+				q, strings.Join(capability.Names(capability.AskOrder()), ", "))
 		}
 		p.MarkAnswered(q)
 	}

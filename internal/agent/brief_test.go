@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/rakasatria/sehaty/internal/capability"
 	"github.com/rakasatria/sehaty/internal/storage"
 	"github.com/rakasatria/sehaty/internal/tools"
 )
@@ -54,7 +55,7 @@ func TestAnAnsweredProfileIsComplete(t *testing.T) {
 		Equipment: []string{"dumbbell"}, Experience: "intermediate",
 		Limitations: []string{"left shoulder"}, Allergies: []string{"prawn"},
 	}
-	done.MarkAnswered(storage.Assessment...)
+	done.MarkAnswered(capability.Names(capability.AskOrder())...)
 
 	// Deps has no DB here, so no weight can be found — which is itself the point:
 	// the consultation is not over until there is one, because the estimate needs it.

@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+
+	"github.com/rakasatria/sehaty/internal/capability"
 	"time"
 )
 
@@ -189,69 +191,60 @@ type ProfileSummary struct {
 	SessionsPerWeek int      `json:"sessions_per_week"`
 }
 
-// Assessment is every question the record wants answered, in the order to ask.
+// Have is what is actually on file about this person, as the capability registry counts
+// it. weighed comes from the weight log, which is a fact rather than an answer.
 //
-// The order is not the order the fields sit in the struct. Equipment first: it answers in
-// one second from a phone, has no sensitivity at all, and teaches the pattern that
-// questions here are short and obviously practical. Injuries wait until a session or two
-// exists to protect. Age waits until height has landed without friction.
-//
-// Schedule earns its place because a plan is built on it. It defaulted to three sessions
-// of fifty minutes and was never once asked about — so every plan rested on two numbers
-// nobody had confirmed.
-var Assessment = []string{
-	"equipment",
-	"goal",
-	"experience",
-	"training schedule",
-	"injuries or conditions",
-	"height",
-	"age",
-	"diet preference",
-	"food allergies",
-	"sex",
-}
-
-// questionAliases maps the finer-grained names a UI may use onto the assessment question
-// they answer.
-//
-// "Berapa kali seminggu, dan berapa lama?" is one question to a person and two sets of
-// buttons on a phone, and the record should not care which way it arrived.
-var questionAliases = map[string]string{
-	"sessions per week": "training schedule",
-	"session minutes":   "training schedule",
-}
-
-// Canonical resolves a question name to the assessment entry it answers.
-func Canonical(q string) (string, bool) {
-	if c, ok := questionAliases[q]; ok {
-		return c, true
+// Only four fields can be told from their own zero value; for the rest, a default that
+// is also a valid answer makes the value useless as evidence, so having been asked is
+// the only signal there is. See capability.Question.Detectable.
+func (p Profile) Have(weighed bool) capability.Have {
+	h := capability.Have{}
+	if weighed {
+		h[capability.FieldWeightLog] = true
 	}
-	for _, v := range Assessment {
-		if v == q {
-			return q, true
+	asked := p.Asked()
+	for _, q := range capability.AskOrder() {
+		if !q.Detectable {
+			h[q.Field] = asked[q.Field]
+			continue
+		}
+		switch q.Field {
+		case capability.FieldAge:
+			h[q.Field] = p.Age > 0
+		case capability.FieldHeight:
+			h[q.Field] = p.HeightCm > 0
+		case capability.FieldSex:
+			h[q.Field] = p.Sex != ""
 		}
 	}
-	return "", false
+	return h
 }
 
-// Missing lists the questions still unanswered, in the order to ask them.
+// Asked is every question that has been put to this person, declines included.
+func (p Profile) Asked() capability.Asked {
+	a := capability.Asked{}
+	for _, q := range p.Answered {
+		if f, ok := capability.Canonical(q); ok {
+			a[f] = true
+		}
+	}
+	return a
+}
+
+// Missing lists the questions still worth putting, in the order to put them.
 //
-// It reads the answered set, NOT the values. Inferring from values cannot work: someone
-// who trains three times a week and someone who has never been asked both hold 3, so the
-// second heuristic would ask them the same question every session forever. A declined
-// question counts as answered — being asked once is a question, being asked every day is
-// nagging.
+// It reads the answered set, NOT the values, for every field whose default is also a
+// valid answer. Inferring from those cannot work: someone who trains three times a week
+// and someone who has never been asked both hold 3, so the value heuristic would ask the
+// second question forever. A declined question counts as answered — being asked once is
+// a question, being asked every day is nagging.
 func (p Profile) Missing() []string {
-	answered := make(map[string]bool, len(p.Answered))
-	for _, a := range p.Answered {
-		answered[a] = true
-	}
-	out := make([]string, 0, len(Assessment))
-	for _, q := range Assessment {
-		if !answered[q] {
-			out = append(out, q)
-		}
+	// weighed is false here deliberately: Missing answers "what should I ask", and
+	// nobody is asked for a weight — log_weight settles it. Passing false cannot add
+	// weight_log to the result because it is not one of the questions.
+	out := []string{}
+	for _, r := range capability.ToAsk(p.Have(false), p.Asked()) {
+		out = append(out, string(r.Field))
 	}
 	return out
 }
@@ -263,34 +256,13 @@ func (p *Profile) MarkAnswered(questions ...string) {
 		have[a] = true
 	}
 	for _, q := range questions {
-		c, ok := Canonical(q)
+		f, ok := capability.Canonical(q)
 		if !ok {
 			continue
 		}
-		if !have[c] {
-			p.Answered = append(p.Answered, c)
-			have[c] = true
+		if !have[string(f)] {
+			p.Answered = append(p.Answered, string(f))
+			have[string(f)] = true
 		}
 	}
-}
-
-// Gated names the unknowns that must not be asked cold.
-//
-// Asked out of nowhere, these three are the ones that read as data harvesting rather than
-// as a health record doing its job. Each has a moment that makes it obvious instead:
-// height belongs beside a weight that just arrived, allergies beside food, and sex is
-// usually settled in passing before it ever needs asking.
-func Gated(field string) (moment string, ok bool) {
-	switch field {
-	case "height":
-		return "only when a weight has just been logged", true
-	case "food allergies":
-		return "only when food is being logged", true
-	case "diet preference":
-		return "only when food is being logged — vegetarian, non-vegetarian or vegan", true
-	case "sex":
-		return "prefer never asking — it usually surfaces on its own. Ask only when a " +
-			"reference range or an exercise choice makes it concretely relevant", true
-	}
-	return "", false
 }

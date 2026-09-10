@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/rakasatria/sehaty/internal/capability"
 	"github.com/rakasatria/sehaty/internal/storage"
 	"github.com/rakasatria/sehaty/internal/tools"
 )
@@ -106,8 +107,8 @@ func Brief(d tools.Deps, p storage.Profile) string {
 	if len(missing) > 0 {
 		s.WriteString("\nSTILL UNKNOWN, in the order to ask:\n")
 		for i, f := range missing {
-			if moment, gated := storage.Gated(f); gated && !canEstimate {
-				fmt.Fprintf(&s, "  %d. %s — %s\n", i+1, f, moment)
+			if q, ok := capability.Ask(capability.Field(f)); ok && q.Gate != "" && !canEstimate {
+				fmt.Fprintf(&s, "  %d. %s — %s\n", i+1, f, q.Gate)
 				continue
 			}
 			fmt.Fprintf(&s, "  %d. %s\n", i+1, f)

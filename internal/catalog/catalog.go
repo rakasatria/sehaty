@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 )
 
@@ -67,6 +68,25 @@ func Load(path string) (*Catalog, error) {
 }
 
 func (c *Catalog) Count() int { return len(c.all) }
+
+// Equipment lists every distinct equipment string in the dataset, sorted.
+//
+// Exposed so update_profile can REJECT a typo. "dumbells" would otherwise be stored
+// happily and leave the person with zero matching exercises and no explanation — a silent
+// failure that looks like the app being broken.
+func (c *Catalog) Equipment() []string {
+	seen := make(map[string]bool, 32)
+	var out []string
+	for _, e := range c.all {
+		k := strings.ToLower(strings.TrimSpace(e.Equipment))
+		if k != "" && !seen[k] {
+			seen[k] = true
+			out = append(out, k)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
 
 // Rated reports how many exercises have a real difficulty rating rather than the
 // fail-safe default. Surfaced so the gap is visible instead of silently assumed away.

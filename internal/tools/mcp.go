@@ -58,6 +58,16 @@ type ProgressArgs struct {
 	Days    int    `json:"days,omitempty" jsonschema:"lookback window; defaults to 14"`
 }
 
+type UpdateProfileArgs struct {
+	Profile         string   `json:"profile" jsonschema:"the profile to update"`
+	Equipment       []string `json:"equipment,omitempty" jsonschema:"what they can train with, e.g. body weight, dumbbell, cable, treadmill"`
+	Goal            string   `json:"goal,omitempty" jsonschema:"fat_loss, strength, hypertrophy or general"`
+	Experience      string   `json:"experience,omitempty" jsonschema:"beginner, intermediate or advanced; sets the difficulty ceiling"`
+	SessionsPerWeek int      `json:"sessions_per_week,omitempty" jsonschema:"1-14"`
+	SessionMinutes  int      `json:"session_minutes,omitempty" jsonschema:"10-180"`
+	MaxDifficulty   int      `json:"max_difficulty,omitempty" jsonschema:"1-5; overrides the ceiling implied by experience"`
+}
+
 type RegisterArgs struct {
 	Channel    string `json:"channel" jsonschema:"telegram, access or mcp"`
 	ExternalID string `json:"external_id" jsonschema:"the id on that channel"`
@@ -131,7 +141,23 @@ func RegisterTools(s *mcp.Server, d Deps, passphrase string) {
 				"max_difficulty": p.MaxDifficulty, "locale": p.Locale,
 				"sessions_per_week":   p.SessionsPerWeek,
 				"available_exercises": len(d.Cat.For(p.Equipment, p.MaxDifficulty)),
+				"equipment_options":   d.Cat.Equipment(),
 				"prescription":        goals[p.Goal]})
+		})
+
+	mcp.AddTool(s, &mcp.Tool{Name: "update_profile",
+		Description: "Change a profile's equipment, goal, experience or session settings. Only the fields supplied are changed. Rejects unknown equipment rather than leaving someone with no exercises and no explanation."},
+		func(ctx context.Context, r *mcp.CallToolRequest, a UpdateProfileArgs) (*mcp.CallToolResult, map[string]any, error) {
+			p, err := UpdateProfile(d, a)
+			if err != nil {
+				return nil, nil, err
+			}
+			return ok(map[string]any{"profile": p.ID, "goal": p.Goal,
+				"equipment": p.Equipment, "experience": p.Experience,
+				"max_difficulty":      p.MaxDifficulty,
+				"sessions_per_week":   p.SessionsPerWeek,
+				"session_minutes":     p.SessionMinutes,
+				"available_exercises": len(d.Cat.For(p.Equipment, p.MaxDifficulty))})
 		})
 
 	mcp.AddTool(s, &mcp.Tool{Name: "register",

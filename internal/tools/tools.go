@@ -269,3 +269,86 @@ func Register(d Deps, channel, externalID, profileID, passphrase, want string) (
 	}
 	return profileID, nil
 }
+
+// experienceCap maps stated experience onto a difficulty ceiling. Someone calling
+// themselves a beginner should not have to know what "max_difficulty 3" means.
+var experienceCap = map[string]int{"beginner": 3, "intermediate": 4, "advanced": 5}
+
+// nonCatalogEquipment is accepted even though no dataset exercise uses it.
+//
+// The treadmill is real equipment Raka owns, but cardio is served by cardio_protocol and
+// log_cardio rather than the exercise catalog, so it appears in no exercise record.
+// Rejecting it as "unknown" would be technically true and practically absurd.
+var nonCatalogEquipment = map[string]bool{"treadmill": true}
+
+// UpdateProfile changes ONLY the fields supplied.
+//
+// A zero value means "leave alone", which is why this cannot be done by writing a whole
+// Profile: a caller setting just equipment would otherwise silently blank the goal and
+// session length. Registration deliberately creates a minimal profile, so without this
+// tool a person is stuck as a body-weight beginner forever.
+func UpdateProfile(d Deps, a UpdateProfileArgs) (storage.Profile, error) {
+	p, err := d.DB.GetProfile(a.Profile)
+	if err != nil {
+		return p, err
+	}
+
+	if len(a.Equipment) > 0 {
+		known := make(map[string]bool, 40)
+		for _, e := range d.Cat.Equipment() {
+			known[e] = true
+		}
+		clean := make([]string, 0, len(a.Equipment))
+		for _, raw := range a.Equipment {
+			k := strings.ToLower(strings.TrimSpace(raw))
+			if !known[k] && !nonCatalogEquipment[k] {
+				return p, fmt.Errorf("unknown equipment %q; the dataset uses: %s",
+					raw, strings.Join(d.Cat.Equipment(), ", "))
+			}
+			clean = append(clean, k)
+		}
+		p.Equipment = clean
+	}
+
+	if a.Goal != "" {
+		if _, ok := goals[a.Goal]; !ok {
+			return p, fmt.Errorf("unknown goal %q; use fat_loss, strength, hypertrophy or general", a.Goal)
+		}
+		p.Goal = a.Goal
+	}
+
+	if a.Experience != "" {
+		ceiling, ok := experienceCap[a.Experience]
+		if !ok {
+			return p, fmt.Errorf("unknown experience %q; use beginner, intermediate or advanced", a.Experience)
+		}
+		p.Experience = a.Experience
+		// Experience implies a ceiling, but an explicit max_difficulty in the same call wins.
+		if a.MaxDifficulty == 0 {
+			p.MaxDifficulty = ceiling
+		}
+	}
+	if a.MaxDifficulty != 0 {
+		if a.MaxDifficulty < 1 || a.MaxDifficulty > 5 {
+			return p, fmt.Errorf("max_difficulty must be 1..5, got %d", a.MaxDifficulty)
+		}
+		p.MaxDifficulty = a.MaxDifficulty
+	}
+	if a.SessionsPerWeek != 0 {
+		if a.SessionsPerWeek < 1 || a.SessionsPerWeek > 14 {
+			return p, fmt.Errorf("sessions_per_week must be 1..14, got %d", a.SessionsPerWeek)
+		}
+		p.SessionsPerWeek = a.SessionsPerWeek
+	}
+	if a.SessionMinutes != 0 {
+		if a.SessionMinutes < 10 || a.SessionMinutes > 180 {
+			return p, fmt.Errorf("session_minutes must be 10..180, got %d", a.SessionMinutes)
+		}
+		p.SessionMinutes = a.SessionMinutes
+	}
+
+	if err := d.DB.SaveProfile(p); err != nil {
+		return p, err
+	}
+	return p, nil
+}

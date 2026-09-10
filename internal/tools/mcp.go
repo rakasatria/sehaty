@@ -125,8 +125,10 @@ func RegisterTools(s *mcp.Server, d Deps, passphrase string) {
 			}
 			out := make([]storage.ProfileSummary, 0, len(ps))
 			for _, p := range ps {
-				out = append(out, storage.ProfileSummary{ID: p.ID, Goal: p.Goal,
-					Equipment: p.Equipment, SessionsPerWeek: p.SessionsPerWeek})
+				// The display name is the point of having one: an opaque id alone
+				// would force every reply to address someone as "n1cmykaqax3g…".
+				out = append(out, storage.ProfileSummary{ID: p.ID, DisplayName: p.DisplayName,
+					Goal: p.Goal, Equipment: p.Equipment, SessionsPerWeek: p.SessionsPerWeek})
 			}
 			return ok(ProfilesOut{Profiles: out, Count: len(out)})
 		})

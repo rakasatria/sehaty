@@ -46,7 +46,7 @@ Environment=SEHATY_FOODS=/opt/sehaty/tkpi-2020.json
 # Transcription is the ONLY thing that sends data off this machine. Omit the key
 # and voice notes are still stored and playable, just never read.
 Environment=SEHATY_OPENROUTER_KEY_FILE=/etc/sehaty/openrouter.key
-Environment=SEHATY_TRANSCRIBE_MODEL=google/gemini-2.5-flash-lite
+Environment=SEHATY_TRANSCRIBE_MODEL=openai/gpt-audio-mini
 # Telegram uses LONG POLLING, so nothing needs publishing and no inbound port opens.
 Environment=SEHATY_TELEGRAM_TOKEN_FILE=/etc/sehaty/telegram.token
 # /etc/sehaty/gocryptfs.pw (0400) unlocks media.enc and lives outside SEHATY_DATA for

@@ -25,13 +25,25 @@ import (
 
 const endpoint = "https://openrouter.ai/api/v1/chat/completions"
 
-// DefaultModel is chosen for cost and for Bahasa Indonesia.
+// DefaultModel is chosen for cost and for the fact that this is ONLY transcription.
 //
-// Audio is billed at the prompt rate here (~32 tokens per second of audio), so a
-// thirty-second note costs a fraction of a cent. Google's Indonesian coverage is strong;
-// the speech-specialist alternative (Voxtral) is European-focused and, per audio token,
-// three orders of magnitude more expensive.
-const DefaultModel = "google/gemini-2.5-flash-lite"
+// Cost per minute of audio, using each model's own audio rate (not its text rate — they
+// differ, and confusing the two reverses the ranking):
+//
+//	openai/gpt-audio-mini    $0.0000006/tok × ~10 tok/s  →  $0.00036/min
+//	google/gemini-2.5-lite   $0.0000003/tok × ~32 tok/s  →  $0.00058/min
+//	openai/gpt-audio         $0.000032/tok               →  $0.019/min
+//	mistralai/voxtral-small  $0.0001/tok                 →  $0.060/min
+//
+// gpt-audio-mini is both the cheapest and AUDIO-NATIVE — its input modalities are text
+// and audio only, from a lineage where transcription is the primary job. The Gemini
+// flash-lite models are general multimodal models that accept audio alongside video,
+// images and files; for a task that is only transcription, the specialist is the better
+// prior.
+//
+// Untested on Bahasa Indonesia specifically. SEHATY_TRANSCRIBE_MODEL overrides this, so
+// comparing the two on a real voice note costs one environment variable.
+const DefaultModel = "openai/gpt-audio-mini"
 
 // The instruction is deliberately narrow. A model asked to "understand" a voice note will
 // summarise, tidy grammar and translate — and a health record needs what was SAID, not a

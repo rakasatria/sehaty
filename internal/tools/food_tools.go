@@ -72,7 +72,9 @@ func FindFoods(d Deps, a FindFoodsArgs) (FoodsOut, error) {
 		limit = 10
 	}
 	found := d.Food.Search(a.Query, limit)
-	out := FoodsOut{Count: len(found)}
+	// An empty result must serialise as [] rather than null: a client should not have
+	// to distinguish "no matches" from "field missing".
+	out := FoodsOut{Count: len(found), Foods: []FoodHit{}}
 	for _, f := range found {
 		out.Foods = append(out.Foods, hit(f))
 	}

@@ -6,6 +6,7 @@
 package tools
 
 import (
+	"errors"
 	"fmt"
 	"math/rand"
 	"sort"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/rakasatria/sehaty/internal/catalog"
 	"github.com/rakasatria/sehaty/internal/crypto"
+	"github.com/rakasatria/sehaty/internal/guardrails"
 	"github.com/rakasatria/sehaty/internal/media"
 	"github.com/rakasatria/sehaty/internal/storage"
 )
@@ -63,6 +65,10 @@ type PlanOut struct {
 	Note       string             `json:"note"`
 	Exercises  []catalog.Exercise `json:"exercises"`
 	RotatedOut int                `json:"rotated_out"`
+	// ExcludedForSafety names movements removed because of a stated limitation, and why.
+	// Reported rather than silently dropped: an exercise that vanishes without explanation
+	// looks like a broken app, and invites the person to go do it unsupervised.
+	ExcludedForSafety map[string]string `json:"excluded_for_safety,omitempty"`
 }
 
 // fnv is a small deterministic hash so a plan is stable for a whole day and different
@@ -85,6 +91,11 @@ func PlanSession(d Deps, profileID, focus string, minutes int) (PlanOut, error) 
 	if err != nil {
 		return PlanOut{}, err
 	}
+	// Some situations are not "train around it" situations. Refuse before building
+	// anything, so no plan exists to be partially followed.
+	if ref, blocked := guardrails.Screen(p.Limitations); blocked {
+		return PlanOut{}, errors.New(ref.Message)
+	}
 	if minutes <= 0 {
 		minutes = p.SessionMinutes
 	}
@@ -94,8 +105,11 @@ func PlanSession(d Deps, profileID, focus string, minutes int) (PlanOut, error) 
 			recent[strings.ToLower(s.Exercise)] = true
 		}
 	}
+	// Contraindicated movements are removed from the pool BEFORE selection, so the
+	// rotation logic never has to know about injuries and cannot accidentally pick one.
+	usable, dropped := guardrails.Filter(p.Limitations, d.Cat.For(p.Equipment, p.MaxDifficulty))
 	byPart := map[string][]catalog.Exercise{}
-	for _, e := range d.Cat.For(p.Equipment, p.MaxDifficulty) {
+	for _, e := range usable {
 		k := strings.ToLower(e.BodyPart)
 		byPart[k] = append(byPart[k], e)
 	}
@@ -123,7 +137,8 @@ func PlanSession(d Deps, profileID, focus string, minutes int) (PlanOut, error) 
 	g := goals[p.Goal]
 	return PlanOut{Profile: profileID, Date: today(), Focus: focus, Minutes: minutes,
 		Goal: p.Goal, Sets: g.Sets, Reps: g.Reps, Rest: g.Rest, Note: g.Note,
-		Exercises: picked, RotatedOut: len(recent)}, nil
+		Exercises: picked, RotatedOut: len(recent),
+		ExcludedForSafety: dropped}, nil
 }
 
 type LogOut struct {
@@ -228,8 +243,11 @@ func FindExercises(d Deps, profileID, muscle string, limit int) ([]catalog.Exerc
 	if err != nil {
 		return nil, err
 	}
+	// Search obeys the same limits as prescription. Handing someone a movement through
+	// search that plan_session would refuse to give them defeats the point.
+	usable, _ := guardrails.Filter(p.Limitations, d.Cat.For(p.Equipment, p.MaxDifficulty))
 	var out []catalog.Exercise
-	for _, e := range d.Cat.For(p.Equipment, p.MaxDifficulty) {
+	for _, e := range usable {
 		hay := strings.ToLower(e.Name + " " + e.BodyPart + " " + e.Target)
 		if muscle != "" && !strings.Contains(hay, strings.ToLower(muscle)) {
 			continue
@@ -308,6 +326,18 @@ func UpdateProfile(d Deps, a UpdateProfileArgs) (storage.Profile, error) {
 			clean = append(clean, k)
 		}
 		p.Equipment = clean
+	}
+
+	// Limitations are replaced wholesale, not merged: recovering from an injury has to be
+	// expressible, and a merge-only field could never be cleared.
+	if a.Limitations != nil {
+		clean := make([]string, 0, len(a.Limitations))
+		for _, l := range a.Limitations {
+			if t := strings.TrimSpace(l); t != "" {
+				clean = append(clean, t)
+			}
+		}
+		p.Limitations = clean
 	}
 
 	if a.Goal != "" {

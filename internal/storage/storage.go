@@ -80,5 +80,48 @@ func Open(path, hexKey string) (*DB, error) {
 		sqlDB.Close()
 		return nil, fmt.Errorf("apply schema: %w", err)
 	}
+	for _, m := range migrations {
+		if err := ensureColumn(sqlDB, m.table, m.column, m.definition); err != nil {
+			sqlDB.Close()
+			return nil, err
+		}
+	}
 	return &DB{sqlDB}, nil
+}
+
+// migrations are columns added after the first release.
+//
+// CREATE TABLE IF NOT EXISTS does NOTHING to a table that already exists, so a column added
+// to schema.sql never reaches a database created by an earlier build. Deploying such a
+// build against a live database fails at the first query with "no such column" — which is
+// precisely the state srvdev01 would have been in.
+var migrations = []struct{ table, column, definition string }{
+	{"profile", "limitations_json", "TEXT NOT NULL DEFAULT '[]'"},
+}
+
+// ensureColumn adds a column if the table lacks it. Idempotent: safe on every startup.
+func ensureColumn(db *sql.DB, table, column, definition string) error {
+	rows, err := db.Query(`SELECT name FROM pragma_table_info(?)`, table)
+	if err != nil {
+		return fmt.Errorf("inspect %s: %w", table, err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return err
+		}
+		if name == column {
+			return nil
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	// Identifiers cannot be bound as parameters; they are constants in `migrations`,
+	// never user input.
+	if _, err := db.Exec("ALTER TABLE " + table + " ADD COLUMN " + column + " " + definition); err != nil {
+		return fmt.Errorf("add %s.%s: %w", table, column, err)
+	}
+	return nil
 }

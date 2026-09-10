@@ -66,6 +66,7 @@ type UpdateProfileArgs struct {
 	SessionsPerWeek int      `json:"sessions_per_week,omitempty" jsonschema:"1-14"`
 	SessionMinutes  int      `json:"session_minutes,omitempty" jsonschema:"10-180"`
 	MaxDifficulty   int      `json:"max_difficulty,omitempty" jsonschema:"1-5; overrides the ceiling implied by experience"`
+	Limitations     []string `json:"limitations,omitempty" jsonschema:"injuries or conditions in the person's own words, e.g. bad knee, rotator cuff injury. Replaces the whole list; send an empty array to clear it"`
 }
 
 type RegisterArgs struct {
@@ -141,6 +142,7 @@ func RegisterTools(s *mcp.Server, d Deps, passphrase string) {
 				"max_difficulty": p.MaxDifficulty, "locale": p.Locale,
 				"sessions_per_week":   p.SessionsPerWeek,
 				"available_exercises": len(d.Cat.For(p.Equipment, p.MaxDifficulty)),
+				"limitations":         p.Limitations,
 				"equipment_options":   d.Cat.Equipment(),
 				"prescription":        goals[p.Goal]})
 		})
@@ -154,6 +156,7 @@ func RegisterTools(s *mcp.Server, d Deps, passphrase string) {
 			}
 			return ok(map[string]any{"profile": p.ID, "goal": p.Goal,
 				"equipment": p.Equipment, "experience": p.Experience,
+				"limitations":         p.Limitations,
 				"max_difficulty":      p.MaxDifficulty,
 				"sessions_per_week":   p.SessionsPerWeek,
 				"session_minutes":     p.SessionMinutes,

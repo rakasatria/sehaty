@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS profile (
   session_minutes   INTEGER NOT NULL DEFAULT 50,
   experience        TEXT NOT NULL DEFAULT 'beginner',
   max_difficulty    INTEGER NOT NULL DEFAULT 3,
+  limitations_json  TEXT NOT NULL DEFAULT '[]',
   locale            TEXT NOT NULL DEFAULT 'en',
   created_at        TEXT NOT NULL
 );

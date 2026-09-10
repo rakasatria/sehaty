@@ -62,7 +62,9 @@ func Handler(d Deps) http.Handler {
 		}
 		v, err := build(d, profileID)
 		if err != nil {
-			http.Error(w, "unavailable", http.StatusInternalServerError)
+			// A health app that fails to render must not look like a health app that
+			// lost your data. The page says so; this is only the plumbing.
+			errorPage(w, http.StatusInternalServerError, "servererror")
 			return
 		}
 		// A dashboard link should never be cached by a proxy or a browser history sync.
@@ -198,35 +200,158 @@ font-size:.75rem;font-family:ui-monospace,monospace}
 <footer>Sehaty · this link stops working an hour after it was made</footer>
 </div></body></html>{{end}}
 
-{{define "state"}}
-.state{max-width:31rem;margin:13vh auto 0;text-align:center}
-.mark{width:76px;height:76px;color:var(--rule);margin-bottom:24px}
-.state h1{font-size:1.55rem;margin:0 0 12px;letter-spacing:-.01em}
-.state p{color:var(--soft);margin:0 0 22px;font-size:.97rem}
-.hint{display:inline-block;border:1px solid var(--rule);border-radius:4px;padding:11px 16px;
-background:var(--card);color:var(--faint);font-size:.83rem;
-font-family:ui-monospace,SFMono-Regular,monospace;text-align:left;line-height:1.7}
-.hint b{color:var(--soft);font-weight:600;font-family:ui-sans-serif,system-ui,sans-serif;
-font-size:.7rem;letter-spacing:.12em;text-transform:uppercase}
+{{define "gone"}}
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Sehaty — link expired</title>
+<style>
+:root{color-scheme:light;--ink:#16211f;--soft:#41514c;--faint:#6d7e78;--paper:#f4f6f4;--rule:#d6dcd7;--accent:#1f6f5c}
+@media (prefers-color-scheme:dark){
+:root{color-scheme:dark;--ink:#dfe5e0;--soft:#a8b4ae;--faint:#7d8a85;--paper:#101614;--rule:#26312d;--accent:#4fae93}
+}
+body{margin:0;background:var(--paper);color:var(--ink);font:400 1rem/1.65 system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",sans-serif;min-height:100vh;min-height:100svh;display:grid;place-items:center;padding:3rem 1.4rem;box-sizing:border-box}
+main{max-width:33rem;width:100%}
+.meta{display:flex;justify-content:space-between;font:500 .7rem/1 ui-monospace,"SF Mono",Menlo,Consolas,monospace;letter-spacing:.24em;text-transform:uppercase;color:var(--faint);border-bottom:1px solid var(--rule);padding-bottom:.8rem;margin-bottom:2.4rem}
+.chart{display:block;width:100%;height:auto;margin-bottom:.4rem}
+.cap{font:400 .72rem/1.5 ui-monospace,"SF Mono",Menlo,Consolas,monospace;letter-spacing:.05em;color:var(--faint);margin:0 0 2.2rem}
+h1{font:500 clamp(1.5rem,3.8vw + .9rem,2.05rem)/1.25 "Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;letter-spacing:-.01em;margin:0 0 1.1rem;color:var(--ink)}
+p{margin:0 0 1rem;color:var(--soft)}
+.next{color:var(--ink);border-left:2px solid var(--accent);padding-left:1rem;margin-top:1.4rem}
+footer{margin-top:2.6rem;border-top:1px solid var(--rule);padding-top:1rem;font-size:.8rem;line-height:1.6;color:var(--faint)}
+.s-acc{stroke:var(--accent)}
+.s-fnt{stroke:var(--faint)}
+.f-pap{fill:var(--paper)}
+.draw{stroke-dasharray:620;stroke-dashoffset:620;animation:draw 1.1s ease-out .2s forwards}
+.late{opacity:0;animation:show .6s ease-out 1.3s forwards}
+@keyframes draw{to{stroke-dashoffset:0}
+}
+@keyframes show{to{opacity:1}
+}
+@media (prefers-reduced-motion:reduce){
+.draw{animation:none;stroke-dasharray:none;stroke-dashoffset:0}
+.late{animation:none;opacity:1}
+}
+</style>
+</head>
+<body>
+<main>
+<header class="meta"><span>Sehaty</span><span>401</span></header>
+<svg class="chart" viewBox="0 0 560 120" fill="none" aria-hidden="true">
+<path class="s-acc draw" d="M20 72 C74 64 108 80 156 68 C204 56 236 50 282 57 C316 62 336 61 348 59" stroke-width="2" stroke-linecap="round"/>
+<path class="s-fnt late" d="M366 58 C424 54 484 59 540 56" stroke-width="2.5" stroke-linecap="round" stroke-dasharray=".1 9"/>
+<circle class="s-acc f-pap late" cx="348" cy="59" r="4.5" stroke-width="2"/>
+</svg>
+<p class="cap">fig. 401 — a key lasts one hour; the record goes on</p>
+<h1>This link is past its hour.</h1>
+<p>Links to a Sehaty dashboard work for one hour from the moment they are made. This is deliberate: a link is the only key to the record it opens, so it is not allowed to outlive the moment it was asked for.</p>
+<p>If this one sat in a chat for a while before you tapped it, nothing is wrong and nothing has been lost. The dashboard is still there, exactly as it was.</p>
+<p class="next">Ask your agent for a fresh link. It takes a moment, and opens the same dashboard.</p>
+<footer>Sehaty is a private, self-hosted health record — encrypted at rest, reached only by signed links.</footer>
+</main>
+</body>
+</html>
 {{end}}
 
-{{define "gone"}}<!doctype html><html lang="en"><head>{{template "head"}}{{template "state"}}
-</style></head><body><div class="wrap"><div class="state">
-<svg class="mark" viewBox="0 0 100 100" aria-hidden="true" fill="none" stroke="currentColor"
- stroke-width="1.5" stroke-linecap="round"><circle cx="50" cy="50" r="33"/><path d="M50 29v22l14 9"/></svg>
-<h1>This link has expired</h1>
-<p>Dashboard links last one&nbsp;hour. That is deliberate — the link is the only key, so it
-should not outlive the moment you asked for&nbsp;it.</p>
-<div class="hint"><b>To get back in</b><br>Ask your agent for a new dashboard link.</div>
-</div></div></body></html>{{end}}
+{{define "notfound"}}
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Sehaty — nothing at this address</title>
+<style>
+:root{color-scheme:light;--ink:#16211f;--soft:#41514c;--faint:#6d7e78;--paper:#f4f6f4;--rule:#d6dcd7;--accent:#1f6f5c}
+@media (prefers-color-scheme:dark){
+:root{color-scheme:dark;--ink:#dfe5e0;--soft:#a8b4ae;--faint:#7d8a85;--paper:#101614;--rule:#26312d;--accent:#4fae93}
+}
+body{margin:0;background:var(--paper);color:var(--ink);font:400 1rem/1.65 system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",sans-serif;min-height:100vh;min-height:100svh;display:grid;place-items:center;padding:3rem 1.4rem;box-sizing:border-box}
+main{max-width:33rem;width:100%}
+.meta{display:flex;justify-content:space-between;font:500 .7rem/1 ui-monospace,"SF Mono",Menlo,Consolas,monospace;letter-spacing:.24em;text-transform:uppercase;color:var(--faint);border-bottom:1px solid var(--rule);padding-bottom:.8rem;margin-bottom:2.4rem}
+.chart{display:block;width:100%;height:auto;margin-bottom:.4rem}
+.cap{font:400 .72rem/1.5 ui-monospace,"SF Mono",Menlo,Consolas,monospace;letter-spacing:.05em;color:var(--faint);margin:0 0 2.2rem}
+h1{font:500 clamp(1.5rem,3.8vw + .9rem,2.05rem)/1.25 "Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;letter-spacing:-.01em;margin:0 0 1.1rem;color:var(--ink)}
+p{margin:0 0 1rem;color:var(--soft)}
+.next{color:var(--ink);border-left:2px solid var(--accent);padding-left:1rem;margin-top:1.4rem}
+footer{margin-top:2.6rem;border-top:1px solid var(--rule);padding-top:1rem;font-size:.8rem;line-height:1.6;color:var(--faint)}
+.s-fnt{stroke:var(--faint)}
+.s-rul{stroke:var(--rule)}
+</style>
+</head>
+<body>
+<main>
+<header class="meta"><span>Sehaty</span><span>404</span></header>
+<svg class="chart" viewBox="0 0 560 120" fill="none" aria-hidden="true">
+<path class="s-fnt" d="M20 64 H540" stroke-width="2.5" stroke-linecap="round" stroke-dasharray=".1 9"/>
+<path class="s-rul" d="M20 78 v10 M150 78 v10 M280 78 v10 M410 78 v10 M540 78 v10" stroke-width="2" stroke-linecap="round"/>
+</svg>
+<p class="cap">fig. 404 — no series recorded at this address</p>
+<h1>There is nothing at this address.</h1>
+<p>Not an error in the usual sense. Sehaty has no front page, no directory of people, and no pages to browse — every dashboard is reached by its own signed link, and by nothing else.</p>
+<p>An address typed by hand, trimmed by a chat app, or guessed will land here, whatever it was meant to reach.</p>
+<p class="next">If someone shared a dashboard with you, ask them for the link itself and open it exactly as it was sent.</p>
+<footer>Sehaty is a private, self-hosted health record — encrypted at rest, reached only by signed links.</footer>
+</main>
+</body>
+</html>
+{{end}}
 
-{{define "notfound"}}<!doctype html><html lang="en"><head>{{template "head"}}{{template "state"}}
-</style></head><body><div class="wrap"><div class="state">
-<svg class="mark" viewBox="0 0 100 100" aria-hidden="true" fill="none" stroke="currentColor"
- stroke-width="1.5" stroke-linecap="round"><circle cx="50" cy="50" r="33"/><path d="M35 50h30"/></svg>
-<h1>Nothing here</h1>
-<p>Sehaty has no front page and no directory of people. Every dashboard is reached by its
-own link and nothing&nbsp;else.</p>
-<div class="hint"><b>Looking for your dashboard?</b><br>Ask your agent for a link.</div>
-</div></div></body></html>{{end}}
+{{define "servererror"}}
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Sehaty — something went wrong</title>
+<style>
+:root{color-scheme:light;--ink:#16211f;--soft:#41514c;--faint:#6d7e78;--paper:#f4f6f4;--rule:#d6dcd7;--accent:#1f6f5c}
+@media (prefers-color-scheme:dark){
+:root{color-scheme:dark;--ink:#dfe5e0;--soft:#a8b4ae;--faint:#7d8a85;--paper:#101614;--rule:#26312d;--accent:#4fae93}
+}
+body{margin:0;background:var(--paper);color:var(--ink);font:400 1rem/1.65 system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",sans-serif;min-height:100vh;min-height:100svh;display:grid;place-items:center;padding:3rem 1.4rem;box-sizing:border-box}
+main{max-width:33rem;width:100%}
+.meta{display:flex;justify-content:space-between;font:500 .7rem/1 ui-monospace,"SF Mono",Menlo,Consolas,monospace;letter-spacing:.24em;text-transform:uppercase;color:var(--faint);border-bottom:1px solid var(--rule);padding-bottom:.8rem;margin-bottom:2.4rem}
+.chart{display:block;width:100%;height:auto;margin-bottom:.4rem}
+.cap{font:400 .72rem/1.5 ui-monospace,"SF Mono",Menlo,Consolas,monospace;letter-spacing:.05em;color:var(--faint);margin:0 0 2.2rem}
+h1{font:500 clamp(1.5rem,3.8vw + .9rem,2.05rem)/1.25 "Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;letter-spacing:-.01em;margin:0 0 1.1rem;color:var(--ink)}
+p{margin:0 0 1rem;color:var(--soft)}
+.next{color:var(--ink);border-left:2px solid var(--accent);padding-left:1rem;margin-top:1.4rem}
+footer{margin-top:2.6rem;border-top:1px solid var(--rule);padding-top:1rem;font-size:.8rem;line-height:1.6;color:var(--faint)}
+.s-acc{stroke:var(--accent)}
+.s-fnt{stroke:var(--faint)}
+.draw{stroke-dasharray:620;stroke-dashoffset:620;animation:draw 1s ease-out .2s forwards}
+.late{opacity:0;animation:show .6s ease-out 1.4s forwards}
+@keyframes draw{to{stroke-dashoffset:0}
+}
+@keyframes show{to{opacity:1}
+}
+@media (prefers-reduced-motion:reduce){
+.draw{animation:none;stroke-dasharray:none;stroke-dashoffset:0}
+.late{animation:none;opacity:1}
+}
+</style>
+</head>
+<body>
+<main>
+<header class="meta"><span>Sehaty</span><span>500</span></header>
+<svg class="chart" viewBox="0 0 560 120" fill="none" aria-hidden="true">
+<path class="s-acc draw" d="M20 68 C66 60 112 76 158 64 C196 54 226 51 252 56" stroke-width="2" stroke-linecap="round"/>
+<path class="s-fnt late" d="M268 55 L296 54" stroke-width="2.5" stroke-linecap="round" stroke-dasharray=".1 9"/>
+<path class="s-acc draw" style="animation-delay:.7s" d="M312 53 C368 47 428 62 486 55 C508 52 526 55 540 54" stroke-width="2" stroke-linecap="round"/>
+</svg>
+<p class="cap">fig. 500 — a gap in the rendering, not in the record</p>
+<h1>We could not build this page.</h1>
+<p>Something failed on our side while the dashboard was being put together. The fault is ours, and there is nothing here for you to fix.</p>
+<p>Your records are stored, encrypted, apart from the pages that display them. A page that fails to render leaves them untouched.</p>
+<p class="next">Try your link again in a minute. If it keeps failing, the details are already in the server&rsquo;s log for whoever runs it.</p>
+<footer>Sehaty is a private, self-hosted health record — encrypted at rest, reached only by signed links.</footer>
+</main>
+</body>
+</html>
+{{end}}
 `))

@@ -133,3 +133,45 @@ func TestExclusionExplainsItself(t *testing.T) {
 		t.Fatalf("reason %q does not mention the limitation it came from", why)
 	}
 }
+
+// Mobility work is usually what an injured joint NEEDS. A quad stretch targets "quads" and
+// so tripped the knee rule, excluding exactly what a physio would prescribe.
+func TestStretchesAreNotExcludedByBroadNets(t *testing.T) {
+	lim := []string{"bad knee"}
+	for _, e := range []catalog.Exercise{
+		ex("all fours squad stretch", "upper legs", "quads"),
+		ex("standing quadriceps stretch", "upper legs", "quads"),
+		ex("butterfly yoga pose", "upper legs", "adductors"),
+	} {
+		if excluded, why := Excluded(lim, e); excluded {
+			t.Errorf("%q excluded for a bad knee (%s) — mobility work should survive", e.Name, why)
+		}
+	}
+	// ...but a stretch whose NAME is a loaded movement is still excluded.
+	if excluded, _ := Excluded(lim, ex("jump squat stretch", "upper legs", "quads")); !excluded {
+		t.Error("a jumping movement was allowed because it had 'stretch' in the name")
+	}
+}
+
+func TestSummariseCondensesRatherThanDumps(t *testing.T) {
+	dropped := map[string]string{}
+	for _, n := range []string{"a squat", "b squat", "c lunge", "d jump", "e squat", "f squat", "g squat"} {
+		dropped[n] = "loads the knee (knee)"
+	}
+	s := Summarise(dropped)
+	if s == nil {
+		t.Fatal("nil summary for a non-empty map")
+	}
+	if s.Count != len(dropped) {
+		t.Errorf("Count = %d, want %d", s.Count, len(dropped))
+	}
+	if len(s.Examples) > 5 {
+		t.Errorf("%d examples; the summary should stay short", len(s.Examples))
+	}
+	if len(s.Reasons) != 1 {
+		t.Errorf("Reasons = %v; identical reasons should collapse", s.Reasons)
+	}
+	if Summarise(nil) != nil {
+		t.Error("Summarise(nil) should be nil so the field is omitted entirely")
+	}
+}

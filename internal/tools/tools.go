@@ -65,10 +65,10 @@ type PlanOut struct {
 	Note       string             `json:"note"`
 	Exercises  []catalog.Exercise `json:"exercises"`
 	RotatedOut int                `json:"rotated_out"`
-	// ExcludedForSafety names movements removed because of a stated limitation, and why.
+	// ExcludedForSafety summarises movements removed because of a stated limitation.
 	// Reported rather than silently dropped: an exercise that vanishes without explanation
 	// looks like a broken app, and invites the person to go do it unsupervised.
-	ExcludedForSafety map[string]string `json:"excluded_for_safety,omitempty"`
+	ExcludedForSafety *guardrails.Summary `json:"excluded_for_safety,omitempty"`
 }
 
 // fnv is a small deterministic hash so a plan is stable for a whole day and different
@@ -138,7 +138,7 @@ func PlanSession(d Deps, profileID, focus string, minutes int) (PlanOut, error) 
 	return PlanOut{Profile: profileID, Date: today(), Focus: focus, Minutes: minutes,
 		Goal: p.Goal, Sets: g.Sets, Reps: g.Reps, Rest: g.Rest, Note: g.Note,
 		Exercises: picked, RotatedOut: len(recent),
-		ExcludedForSafety: dropped}, nil
+		ExcludedForSafety: guardrails.Summarise(dropped)}, nil
 }
 
 type LogOut struct {
@@ -381,4 +381,13 @@ func UpdateProfile(d Deps, a UpdateProfileArgs) (storage.Profile, error) {
 		return p, err
 	}
 	return p, nil
+}
+
+// Available counts what a profile can genuinely be prescribed: equipment, difficulty AND
+// limitations. Reporting the pre-guardrail figure told someone with a knee injury they had
+// 586 exercises when hundreds had already been ruled out — a number that reads as
+// reassurance and is simply wrong.
+func Available(d Deps, p storage.Profile) int {
+	usable, _ := guardrails.Filter(p.Limitations, d.Cat.For(p.Equipment, p.MaxDifficulty))
+	return len(usable)
 }

@@ -19,6 +19,7 @@ package guardrails
 import (
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/rakasatria/sehaty/internal/catalog"
@@ -165,6 +166,13 @@ func Excluded(limitations []string, e catalog.Exercise) (bool, string) {
 	body := strings.ToLower(e.BodyPart)
 	target := strings.ToLower(e.Target)
 
+	// Mobility work is usually what an injured joint NEEDS, not what it must avoid. A
+	// quad stretch targets "quads" and so tripped the knee rule, which excluded exactly
+	// the movements a physio would prescribe. Stretches remain subject to the name rules
+	// below — a "jump stretch" is still a jump — but not to the broad body/target nets.
+	isStretch := strings.Contains(name, "stretch") || strings.Contains(name, "yoga") ||
+		strings.Contains(name, "mobility")
+
 	for _, r := range rules {
 		hit := ""
 		for _, w := range r.when {
@@ -178,6 +186,9 @@ func Excluded(limitations []string, e catalog.Exercise) (bool, string) {
 		}
 		if r.name != nil && r.name.MatchString(name) {
 			return true, fmt.Sprintf("%s (%s)", r.because, hit)
+		}
+		if isStretch {
+			continue
 		}
 		for _, b := range r.body {
 			if body == b {
@@ -210,4 +221,39 @@ func Filter(limitations []string, in []catalog.Exercise) (kept []catalog.Exercis
 		dropped = nil
 	}
 	return kept, dropped
+}
+
+// Summary is what a caller is told about exclusions.
+//
+// The full map is hundreds of entries for a plan of seven exercises — useless to a person
+// and expensive to send to a model. What matters is that removals happened, why, and a few
+// examples to make it concrete.
+type Summary struct {
+	Count    int      `json:"count"`
+	Reasons  []string `json:"reasons"`
+	Examples []string `json:"examples,omitempty"`
+}
+
+// Summarise condenses the dropped map. Examples are sorted so the output is stable.
+func Summarise(dropped map[string]string) *Summary {
+	if len(dropped) == 0 {
+		return nil
+	}
+	seen := map[string]bool{}
+	s := &Summary{Count: len(dropped)}
+	names := make([]string, 0, len(dropped))
+	for name, why := range dropped {
+		names = append(names, name)
+		if !seen[why] {
+			seen[why] = true
+			s.Reasons = append(s.Reasons, why)
+		}
+	}
+	sort.Strings(names)
+	sort.Strings(s.Reasons)
+	if len(names) > 5 {
+		names = names[:5]
+	}
+	s.Examples = names
+	return s
 }

@@ -141,7 +141,7 @@ func RegisterTools(s *mcp.Server, d Deps, passphrase string) {
 				"equipment": p.Equipment, "experience": p.Experience,
 				"max_difficulty": p.MaxDifficulty, "locale": p.Locale,
 				"sessions_per_week":   p.SessionsPerWeek,
-				"available_exercises": len(d.Cat.For(p.Equipment, p.MaxDifficulty)),
+				"available_exercises": Available(d, p),
 				"limitations":         p.Limitations,
 				"equipment_options":   d.Cat.Equipment(),
 				"prescription":        goals[p.Goal]})

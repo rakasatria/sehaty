@@ -40,12 +40,17 @@ func TestPlanSessionExcludesContraindicatedMovementsAndSaysSo(t *testing.T) {
 			t.Errorf("prescribed %q to someone with a bad knee", e.Name)
 		}
 	}
-	if len(plan.ExcludedForSafety) == 0 {
-		t.Error("nothing reported as excluded; the person cannot tell why movements vanished")
+	ex := plan.ExcludedForSafety
+	if ex == nil || ex.Count == 0 {
+		t.Fatal("nothing reported as excluded; the person cannot tell why movements vanished")
 	}
-	for name, why := range plan.ExcludedForSafety {
+	// A summary, not a dump: hundreds of entries for a seven-exercise plan is noise.
+	if len(ex.Examples) > 5 {
+		t.Errorf("summary listed %d examples; it should stay short", len(ex.Examples))
+	}
+	for _, why := range ex.Reasons {
 		if !strings.Contains(strings.ToLower(why), "knee") {
-			t.Errorf("exclusion of %q gives reason %q, which does not cite the limitation", name, why)
+			t.Errorf("reason %q does not cite the limitation it came from", why)
 		}
 	}
 }

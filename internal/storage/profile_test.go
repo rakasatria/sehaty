@@ -7,7 +7,7 @@ import (
 
 func testDB(t *testing.T) *DB {
 	t.Helper()
-	db, err := Open(t.TempDir() + "/t.db")
+	db, err := Open(t.TempDir()+"/t.db", testKey)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -3,7 +3,7 @@ package storage
 import "testing"
 
 func TestOpenCreatesSchema(t *testing.T) {
-	db, err := Open(t.TempDir() + "/t.db")
+	db, err := Open(t.TempDir()+"/t.db", testKey)
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -22,7 +22,7 @@ func TestOpenCreatesSchema(t *testing.T) {
 }
 
 func TestOpenSetsWAL(t *testing.T) {
-	db, err := Open(t.TempDir() + "/t.db")
+	db, err := Open(t.TempDir()+"/t.db", testKey)
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}

@@ -31,16 +31,15 @@ type Cipher struct{ aead cipher.AEAD }
 // short key is rejected loudly rather than silently padded, because silent padding is
 // how "encrypted" data ends up trivially breakable.
 func New(b64 string) (*Cipher, error) {
-	if b64 == "" {
-		return nil, ErrNoKey
-	}
-	key, err := base64.StdEncoding.DecodeString(b64)
+	master, err := decodeMaster(b64)
 	if err != nil {
-		return nil, fmt.Errorf("SEHATY_KEY is not valid base64: %w", err)
+		return nil, err
 	}
-	if len(key) != KeyBytes {
-		return nil, fmt.Errorf("SEHATY_KEY decodes to %d bytes, need %d (AES-256)",
-			len(key), KeyBytes)
+	// NOT the master key itself: documents get their own HKDF subkey so that the
+	// database-file cipher and this one never share bytes. See derive.go.
+	key, err := derive(master, infoDocs)
+	if err != nil {
+		return nil, fmt.Errorf("derive document key: %w", err)
 	}
 	block, err := aes.NewCipher(key)
 	if err != nil {

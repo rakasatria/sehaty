@@ -50,17 +50,17 @@ var blocks = map[string][]struct {
 }
 
 type PlanOut struct {
-	Profile   string             `json:"profile"`
-	Date      string             `json:"date"`
-	Focus     string             `json:"focus"`
-	Minutes   int                `json:"minutes"`
-	Goal      string             `json:"goal"`
-	Sets      int                `json:"sets"`
-	Reps      string             `json:"reps"`
-	Rest      string             `json:"rest"`
-	Note      string             `json:"note"`
-	Exercises []catalog.Exercise `json:"exercises"`
-	RotatedOut int               `json:"rotated_out"`
+	Profile    string             `json:"profile"`
+	Date       string             `json:"date"`
+	Focus      string             `json:"focus"`
+	Minutes    int                `json:"minutes"`
+	Goal       string             `json:"goal"`
+	Sets       int                `json:"sets"`
+	Reps       string             `json:"reps"`
+	Rest       string             `json:"rest"`
+	Note       string             `json:"note"`
+	Exercises  []catalog.Exercise `json:"exercises"`
+	RotatedOut int                `json:"rotated_out"`
 }
 
 // fnv is a small deterministic hash so a plan is stable for a whole day and different

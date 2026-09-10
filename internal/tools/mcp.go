@@ -129,9 +129,9 @@ func RegisterTools(s *mcp.Server, d Deps, passphrase string) {
 			return ok(map[string]any{"profile": p.ID, "goal": p.Goal,
 				"equipment": p.Equipment, "experience": p.Experience,
 				"max_difficulty": p.MaxDifficulty, "locale": p.Locale,
-				"sessions_per_week":    p.SessionsPerWeek,
-				"available_exercises":  len(d.Cat.For(p.Equipment, p.MaxDifficulty)),
-				"prescription":         goals[p.Goal]})
+				"sessions_per_week":   p.SessionsPerWeek,
+				"available_exercises": len(d.Cat.For(p.Equipment, p.MaxDifficulty)),
+				"prescription":        goals[p.Goal]})
 		})
 
 	mcp.AddTool(s, &mcp.Tool{Name: "register",

@@ -4,3 +4,13 @@ sehaty
 *.db
 *.db-shm
 *.db-wal
+
+# editor and OS leftovers — a swap file can carry secrets mid-edit
+*.swp
+*.swo
+._*
+.DS_Store
+
+# never commit a token — this repo is public
+.env
+.env.*

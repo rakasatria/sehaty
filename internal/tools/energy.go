@@ -30,20 +30,31 @@ import (
 // A single figure invites someone to eat to it exactly. The band is the honest
 // shape of the answer.
 type EnergyEstimate struct {
-	BMR       int     `json:"bmr_kcal"`
-	TDEE      int     `json:"maintenance_kcal"`
-	LowKcal   int     `json:"range_low_kcal"`
-	HighKcal  int     `json:"range_high_kcal"`
-	Activity  float64 `json:"activity_factor"`
-	Basis     string  `json:"basis"`
-	ForGoal   string  `json:"adjusted_for_goal,omitempty"`
-	GoalLow   int     `json:"goal_low_kcal,omitempty"`
-	GoalHigh  int     `json:"goal_high_kcal,omitempty"`
-	ProteinG  int     `json:"protein_g_per_day,omitempty"`
-	Caveat    string  `json:"caveat"`
-	Equation  string  `json:"equation"`
-	UsedWeigh string  `json:"weight_used"`
+	BMR      int     `json:"bmr_kcal"`
+	TDEE     int     `json:"maintenance_kcal"`
+	LowKcal  int     `json:"range_low_kcal"`
+	HighKcal int     `json:"range_high_kcal"`
+	Activity float64 `json:"activity_factor"`
+	Basis    string  `json:"basis"`
+	ForGoal  string  `json:"adjusted_for_goal,omitempty"`
+	GoalLow  int     `json:"goal_low_kcal,omitempty"`
+	GoalHigh int     `json:"goal_high_kcal,omitempty"`
+	ProteinG int     `json:"protein_g_per_day,omitempty"`
+	Caveat   string  `json:"caveat"`
+	// Provisional is always true today, and is here so the client can say so and so
+	// that a future self-calibrated figure can say it is NOT. The equation is a prior;
+	// the weight log is the evidence.
+	Provisional bool   `json:"provisional"`
+	Equation    string `json:"equation"`
+	UsedWeigh   string `json:"weight_used"`
 }
+
+// maxDailyDeficit is the absolute ceiling, in kcal/day, regardless of body size.
+//
+// It binds only above roughly 2,600 kcal of maintenance; below that a 20% cut is the
+// smaller number. Set here rather than inline so the one place it can be argued about is
+// obvious.
+const maxDailyDeficit = 500.0
 
 // activityFor maps training frequency onto the standard multipliers. Someone who
 // trains four times a week and sits down the rest of the time is not "very
@@ -122,27 +133,60 @@ func EstimateEnergy(d Deps, profileID string) (EnergyEstimate, error) {
 		TDEE:     round(tdee),
 		Activity: factor,
 		Basis:    basis,
-		// ±10% is roughly where 70% of individuals fall against this equation.
-		LowKcal:   round(tdee * 0.90),
-		HighKcal:  round(tdee * 1.10),
-		Equation:  "Mifflin-St Jeor (1990), × activity factor",
-		UsedWeigh: fmt.Sprintf("%.1f kg", weight),
-		Caveat: "An ESTIMATE, not a target. This equation predicts a group average; " +
-			"an individual can sit 20% either side of it. What actually decides the " +
-			"number is what happens to the weight log over two or three weeks. If a " +
-			"dietitian has given a figure, theirs wins — it is based on you.",
+		// ±25%, and the width is the honest part.
+		//
+		// The familiar "±10% covers 70%" figure describes MEASURED RMR in US-like
+		// populations. This is an ESTIMATED TDEE — a predicted BMR multiplied by a
+		// guessed activity factor — which compounds two errors: RMR SD around 10%, PAL
+		// misclassification around 12%. That puts ±10% at roughly 55-60% coverage.
+		//
+		// And no RMR equation has ever been validated in an Indonesian or Malay adult
+		// cohort. The nearest data is Korean (69% within ±10%) and Chinese (17.5-59%
+		// depending on equation). The reason is structural rather than incidental:
+		// measured REE differs between Asian and white adults by about 16% in absolute
+		// terms and NOT AT ALL once adjusted for fat-free mass. An equation built from
+		// weight, height, age and sex cannot see body composition, so it inherits that
+		// difference and carries it. The direction of bias is inconsistent across Asian
+		// cohorts, so there is no constant to correct by either.
+		LowKcal:     round(tdee * 0.75),
+		HighKcal:    round(tdee * 1.25),
+		Equation:    "Mifflin-St Jeor (1990), × activity factor — unvalidated for this population",
+		Provisional: true,
+		UsedWeigh:   fmt.Sprintf("%.1f kg", weight),
+		Caveat: "A STARTING GUESS, not a target and not a measurement. This equation was " +
+			"built on 498 American adults and has never been tested on Indonesians, so " +
+			"the range around it is wide on purpose. Its real job is to be replaced: " +
+			"after two or three weeks of logged weight, what actually happened to that " +
+			"weight is a far better number than any equation, because a person's energy " +
+			"use is very stable over time even though it differs a lot between people. " +
+			"If a dietitian has given a figure, theirs wins — it was built on you.",
 	}
 
 	// A goal-adjusted band, where the goal implies one.
 	switch p.Goal {
 	case "fat_loss":
-		out.ForGoal = "fat_loss — a moderate deficit, roughly 15-20% under maintenance"
-		out.GoalLow, out.GoalHigh = round(tdee*0.80), round(tdee*0.85)
+		// Two rules exist in the literature and they disagree above roughly 2,600 kcal:
+		// a percentage of maintenance, and an absolute ceiling near 500 kcal/day. They
+		// coincide at the single best data point — a trial whose slower arm ran ~469
+		// kcal/day with 1.6 g/kg protein and four lifting sessions a week and GAINED
+		// lean mass — which is why the question has stayed unsettled.
+		//
+		// Above that crossover the absolute ceiling is extrapolated from a pool of
+		// sedentary, untrained people around sixty with uncontrolled protein intake, so
+		// we take the smaller of the two rather than the more permissive one. Protein
+		// and training dose appear to matter more than the exact percentage anyway.
+		deficit := math.Min(tdee*0.20, maxDailyDeficit)
+		out.ForGoal = "fat_loss — a moderate deficit"
+		out.GoalLow, out.GoalHigh = round(tdee-deficit), round(tdee-deficit*0.75)
 	case "hypertrophy":
 		out.ForGoal = "hypertrophy — a small surplus, roughly 5-10% over maintenance"
 		out.GoalLow, out.GoalHigh = round(tdee*1.05), round(tdee*1.10)
 	case "strength":
-		out.ForGoal = "strength — around maintenance to a slight surplus"
+		// Strength is largely insensitive to deficit size in both of the trials that
+		// examined it — squat and bench held up in fast and slow arms alike. So the
+		// energy argument matters much less for someone chasing strength than it does
+		// for someone chasing mass, and this band is deliberately loose.
+		out.ForGoal = "strength — around maintenance"
 		out.GoalLow, out.GoalHigh = round(tdee), round(tdee*1.05)
 	}
 

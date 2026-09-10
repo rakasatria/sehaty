@@ -58,23 +58,71 @@ func Brief(d tools.Deps, p storage.Profile) string {
 		}
 	}
 
+	// The intake needs a weight, which is not a profile field — it is logged, and
+	// the energy equation cannot run without one.
+	weighed := false
+	if d.DB != nil {
+		if ws, err := d.DB.Weights(p.ID, 3650); err == nil && len(ws) > 0 {
+			weighed = true
+		}
+	}
+
 	missing := p.Missing()
-	if len(missing) == 0 {
-		s.WriteString("\nYou know everything you need about them. Do not ask profile " +
-			"questions; just help.\n")
+	if len(missing) == 0 && weighed {
+		s.WriteString("\nCONSULTATION COMPLETE. You know everything you need. Do not ask " +
+			"profile questions any more; just help, and log what they tell you.\n")
 		return s.String()
 	}
 
-	s.WriteString("\nSTILL UNKNOWN, in the order to ask:\n")
-	for i, f := range missing {
-		if moment, gated := storage.Gated(f); gated {
-			fmt.Fprintf(&s, "  %d. %s — %s\n", i+1, f, moment)
-			continue
+	// FIRST CONSULTATION. Different rules apply here from the ongoing relationship,
+	// and the brief says which are in force so the prompt does not have to guess.
+	s.WriteString("\nYOU ARE IN THE FIRST CONSULTATION — the intake is not finished.\n")
+
+	canEstimate := p.Age > 0 && p.HeightCm > 0 && p.Sex != "" && weighed
+	if canEstimate {
+		s.WriteString("\nYou now have age, height, sex and a weight. Before asking anything " +
+			"else, call estimate_energy and give them the result — that is what they have " +
+			"been answering questions FOR, and it should arrive as soon as it can be earned " +
+			"rather than at the end. Then carry on with what is still missing.\n")
+	} else {
+		need := []string{}
+		if p.Age == 0 {
+			need = append(need, "age")
 		}
-		fmt.Fprintf(&s, "  %d. %s\n", i+1, f)
+		if p.HeightCm == 0 {
+			need = append(need, "height")
+		}
+		if p.Sex == "" {
+			need = append(need, "sex")
+		}
+		if !weighed {
+			need = append(need, "a current weight")
+		}
+		fmt.Fprintf(&s, "\nStill needed before you can estimate their energy: %s. "+
+			"These come first — the estimate is the point of the intake.\n",
+			strings.Join(need, ", "))
 	}
-	s.WriteString("Take the first one this moment suits, ask it at the end of a reply " +
-		"that already did something useful, and ask nothing else. If this message gave " +
-		"you nothing useful to do, ask nothing at all.\n")
+
+	if len(missing) > 0 {
+		s.WriteString("\nSTILL UNKNOWN, in the order to ask:\n")
+		for i, f := range missing {
+			if moment, gated := storage.Gated(f); gated && !canEstimate {
+				fmt.Fprintf(&s, "  %d. %s — %s\n", i+1, f, moment)
+				continue
+			}
+			fmt.Fprintf(&s, "  %d. %s\n", i+1, f)
+		}
+		s.WriteString("During the first consultation the moment-gating above is relaxed: " +
+			"they came to be assessed, so height and the rest may be asked directly.\n")
+	}
+	if !weighed {
+		s.WriteString("\nThey have never been weighed. Ask for a current weight and log it " +
+			"with log_weight.\n")
+	}
+	s.WriteString("\nAsk the NEXT question as soon as they answer the last one — do not wait " +
+		"for something useful to do first, and do not pad between questions. One question " +
+		"per message still, buttons where offer_choices has them, and skip is always a " +
+		"complete answer. When the intake is done, offer to build their plan.\n")
+
 	return s.String()
 }

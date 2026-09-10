@@ -56,8 +56,23 @@ func TestTheEquationIsTheEquation(t *testing.T) {
 	if got.ProteinG != 116 {
 		t.Errorf("protein = %d g, want 116 (72.3 × 1.6)", got.ProteinG)
 	}
-	if !strings.Contains(got.Caveat, "ESTIMATE") || !strings.Contains(got.Caveat, "dietitian") {
-		t.Error("the estimate travels without its caveat")
+	// The caveat is load-bearing, not decoration. It has to say three things: that
+	// this is a guess, that the equation was never tested on people like this user,
+	// and that the weight log will beat it. Losing any of them turns a wide prior into
+	// a confident-looking number.
+	for _, want := range []string{"STARTING GUESS", "never been tested on Indonesians",
+		"two or three weeks", "dietitian"} {
+		if !strings.Contains(got.Caveat, want) {
+			t.Errorf("the caveat no longer says %q", want)
+		}
+	}
+	if !got.Provisional {
+		t.Error("the estimate does not declare itself provisional")
+	}
+	// The band must stay wide. ±10% would describe measured RMR in a US cohort, not an
+	// estimated TDEE for someone the equation has never been validated on.
+	if spread := float64(got.HighKcal-got.LowKcal) / float64(got.TDEE); spread < 0.45 {
+		t.Errorf("the range narrowed to %.0f%% — it should be about 50%% wide", spread*100)
 	}
 }
 

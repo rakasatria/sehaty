@@ -153,3 +153,19 @@ CREATE TABLE IF NOT EXISTS media_transcript (
   created_at TEXT NOT NULL,
   PRIMARY KEY (profile_id, hash)
 );
+
+-- The schedule board. One row per person per kind, so nothing can stack up into
+-- three daily check-ins nobody asked for. The timezone is stored per row because
+-- 07:00 means nothing on a server that thinks in UTC.
+CREATE TABLE IF NOT EXISTS reminder (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  profile_id  TEXT NOT NULL REFERENCES profile(id),
+  kind        TEXT NOT NULL,
+  hour        INTEGER NOT NULL,
+  minute      INTEGER NOT NULL,
+  weekday     INTEGER NOT NULL DEFAULT -1,
+  zone        TEXT NOT NULL DEFAULT 'Asia/Jakarta',
+  enabled     INTEGER NOT NULL DEFAULT 1,
+  last_sent   TEXT NOT NULL DEFAULT '',
+  UNIQUE (profile_id, kind)
+);

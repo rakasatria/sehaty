@@ -9,6 +9,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/rakasatria/sehaty/internal/catalog"
+	"github.com/rakasatria/sehaty/internal/media"
 	"github.com/rakasatria/sehaty/internal/storage"
 )
 
@@ -250,6 +251,46 @@ func RegisterTools(s *mcp.Server, d Deps, passphrase string) {
 				return nil, nil, err
 			}
 			return ok(map[string]any{"profile": a.Profile, "minutes": a.Minutes})
+		})
+
+	mcp.AddTool(s, &mcp.Tool{Name: "attach_media",
+		Annotations: annAdd(),
+		Description: "Store a meal photo or a voice note and get back its content hash. Call this when someone sends a picture of what they ate, or a spoken note, before logging the meal. Does NOT read or interpret the file — nothing transcribes voice yet, and macros still come from the food table, never from a photo. Returns the hash to pass to log_food as `photo`; the same file sent twice stores once."},
+		func(ctx context.Context, r *mcp.CallToolRequest, a AttachMediaArgs) (*mcp.CallToolResult, AttachMediaOut, error) {
+			out, err := AttachMedia(d, a)
+			if err != nil {
+				return nil, AttachMediaOut{}, err
+			}
+			return nil, out, nil
+		})
+
+	mcp.AddTool(s, &mcp.Tool{Name: "list_media",
+		Annotations: annRead(),
+		Description: "List the photos or voice notes stored for one profile, newest first. Call this to find a hash when someone refers to a picture they sent earlier. Does NOT return the files themselves, only their hashes and sizes. Returns nothing for another person's profile — media is scoped per profile and a hash alone will not open it."},
+		func(ctx context.Context, r *mcp.CallToolRequest, a ListMediaArgs) (*mcp.CallToolResult, ListMediaOut, error) {
+			out, err := ListMedia(d, a)
+			if err != nil {
+				return nil, ListMediaOut{}, err
+			}
+			return nil, out, nil
+		})
+
+	mcp.AddTool(s, &mcp.Tool{Name: "get_media",
+		Annotations: annRead(),
+		Description: "Fetch a stored photo or voice note by its hash and return the file itself, so you can look at the meal. Call this when you need to see a picture the person sent. Do NOT use what you see to invent nutrition numbers — identify the dish and confirm the portion, then get the macros from find_foods. Returns the image or audio inline; a hash belonging to another profile will not open, because each file is cryptographically bound to its owner."},
+		func(ctx context.Context, r *mcp.CallToolRequest, a GetMediaArgs) (*mcp.CallToolResult, struct{}, error) {
+			raw, kind, err := GetMediaBytes(d, a)
+			if err != nil {
+				return nil, struct{}{}, err
+			}
+			mime := defaultMIME[kind]
+			var content mcp.Content
+			if kind == media.KindVoice {
+				content = &mcp.AudioContent{Data: raw, MIMEType: mime}
+			} else {
+				content = &mcp.ImageContent{Data: raw, MIMEType: mime}
+			}
+			return &mcp.CallToolResult{Content: []mcp.Content{content}}, struct{}{}, nil
 		})
 
 	mcp.AddTool(s, &mcp.Tool{Name: "list_documents",

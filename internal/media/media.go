@@ -51,6 +51,7 @@ type Store interface {
 	Put(ctx context.Context, profileID string, kind Kind, r io.Reader) (string, error)
 	Get(ctx context.Context, profileID string, kind Kind, hash string) (io.ReadCloser, error)
 	Exists(ctx context.Context, profileID string, kind Kind, hash string) (bool, error)
+	List(ctx context.Context, profileID string, kind Kind) ([]Blob, error)
 }
 
 type Local struct {

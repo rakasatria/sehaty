@@ -1,10 +1,12 @@
 package tools
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
 	"github.com/rakasatria/sehaty/internal/food"
+	"github.com/rakasatria/sehaty/internal/media"
 	"github.com/rakasatria/sehaty/internal/storage"
 )
 
@@ -35,6 +37,7 @@ type LogFoodArgs struct {
 	Grams          float64 `json:"grams" jsonschema:"portion in grams of edible food"`
 	Meal           string  `json:"meal,omitempty" jsonschema:"sarapan, makan siang, makan malam, snack"`
 	Date           string  `json:"date,omitempty" jsonschema:"YYYY-MM-DD; defaults to today"`
+	Photo          string  `json:"photo,omitempty" jsonschema:"content hash from attach_media, to attach a meal photo to this entry"`
 	AllowDuplicate bool    `json:"allow_duplicate,omitempty" jsonschema:"set true only when the same food really was eaten twice; otherwise an identical repeat is treated as a retry"`
 }
 
@@ -50,6 +53,7 @@ type LogFoodOut struct {
 	CarbsG         float64  `json:"carbs_g"`
 	FatG           float64  `json:"fat_g"`
 	Source         string   `json:"source"`
+	Photo          string   `json:"photo,omitempty"`
 	SourceCitation string   `json:"source_citation"`
 	Flags          []string `json:"verification_flags,omitempty"`
 	Note           string   `json:"note,omitempty"`
@@ -177,11 +181,24 @@ func LogFood(d Deps, a LogFoodArgs) (LogFoodOut, error) {
 		}
 	}
 
+	// A photo must actually exist before it is recorded against a meal — a dangling hash
+	// would look like evidence and resolve to nothing.
+	if a.Photo != "" && d.Media != nil {
+		ok, err := d.Media.Exists(context.Background(), a.Profile, media.KindPhoto, a.Photo)
+		if err != nil {
+			return LogFoodOut{}, err
+		}
+		if !ok {
+			return LogFoodOut{}, fmt.Errorf("no photo %q stored for this profile; "+
+				"call attach_media first and use the hash it returns", a.Photo)
+		}
+	}
+
 	source := "tkpi:" + f.Code
 	err = d.DB.LogFood(a.Profile, storage.FoodEntry{
 		Date: date, Meal: a.Meal, Item: item, Grams: a.Grams,
 		Kcal: m.Kcal, ProteinG: m.ProteinG, CarbsG: m.CarbsG, FatG: m.FatG,
-		Source: source,
+		Source: source, PhotoHash: a.Photo,
 	})
 	if err != nil {
 		return LogFoodOut{}, err
@@ -189,7 +206,8 @@ func LogFood(d Deps, a LogFoodArgs) (LogFoodOut, error) {
 
 	out := LogFoodOut{Status: "logged", Profile: a.Profile, Date: date, Meal: a.Meal,
 		Item: item, Grams: a.Grams, Kcal: m.Kcal, ProteinG: m.ProteinG, CarbsG: m.CarbsG,
-		FatG: m.FatG, Source: source, SourceCitation: f.SourceCitation, Flags: f.Flags()}
+		FatG: m.FatG, Source: source, Photo: a.Photo,
+		SourceCitation: f.SourceCitation, Flags: f.Flags()}
 	if len(out.Flags) > 0 {
 		out.Note = "This food's values could not be confirmed across sources — treat the " +
 			"numbers as uncertain rather than measured."

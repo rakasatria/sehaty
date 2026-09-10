@@ -247,6 +247,16 @@ func RegisterTools(s *mcp.Server, d Deps, passphrase string) {
 			return nil, out, nil
 		})
 
+	mcp.AddTool(s, &mcp.Tool{Name: "name_foods",
+		Description: "Record English names for Indonesian foods, and get the next batch that still needs naming. Call it with no entries to fetch work, then call it again with the names you worked out; repeat until remaining reaches zero. Send an EMPTY name_en for foods with no English equivalent such as oncom or gembus — that is a real answer and stops them being asked about again; do NOT invent a literal translation. Returns how many were saved, any codes that do not exist, and the next batch, so you can work through the table without holding all 1,142 foods at once."},
+		func(ctx context.Context, r *mcp.CallToolRequest, a NameFoodsArgs) (*mcp.CallToolResult, NameFoodsOut, error) {
+			out, err := NameFoods(d, a)
+			if err != nil {
+				return nil, NameFoodsOut{}, err
+			}
+			return nil, out, nil
+		})
+
 	mcp.AddTool(s, &mcp.Tool{Name: "log_food",
 		Description: "Record something eaten, scaling the table's per-100g values to the portion given in grams. Call this when someone says what they ate; pass a TKPI code from find_foods when the name is not unique. Do NOT invent a food or a portion — an unrecognised name is refused rather than guessed, and an ambiguous one comes back with the candidate codes for you to choose from. Returns the saved entry with its macros and provenance; an identical entry already logged today is treated as a retry and NOT logged twice unless allow_duplicate is set."},
 		func(ctx context.Context, r *mcp.CallToolRequest, a LogFoodArgs) (*mcp.CallToolResult, LogFoodOut, error) {

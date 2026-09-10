@@ -100,3 +100,13 @@ CREATE TABLE IF NOT EXISTS media (
   caption     TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_media_profile ON media(profile_id, created_at);
+
+-- English names for TKPI foods, supplied by the assistant and correctable by hand.
+-- Search metadata only: an alias never affects a nutrition value. An empty name_en is
+-- meaningful and records that the food has no common English name.
+CREATE TABLE IF NOT EXISTS food_alias (
+  code       TEXT PRIMARY KEY,
+  name_en    TEXT NOT NULL DEFAULT '',
+  source     TEXT NOT NULL DEFAULT 'agent',
+  updated_at TEXT NOT NULL
+);

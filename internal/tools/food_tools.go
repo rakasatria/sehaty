@@ -16,6 +16,7 @@ type FindFoodsArgs struct {
 type FoodHit struct {
 	Code           string      `json:"code"`
 	Name           string      `json:"name"`
+	NameEN         string      `json:"name_en,omitempty"`
 	Group          string      `json:"group,omitempty"`
 	Per100g        food.Macros `json:"per_100g"`
 	SourceCitation string      `json:"source_citation"`
@@ -59,7 +60,7 @@ func hit(f food.Food) FoodHit {
 	if name == "" {
 		name = f.NameID
 	}
-	return FoodHit{Code: f.Code, Name: name, Group: f.Group, Per100g: f.Macros(100),
+	return FoodHit{Code: f.Code, Name: name, NameEN: f.NameEN, Group: f.Group, Per100g: f.Macros(100),
 		SourceCitation: f.SourceCitation, Flags: f.Flags()}
 }
 

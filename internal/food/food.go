@@ -19,6 +19,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"sync"
 	"unicode"
 )
 
@@ -43,8 +44,19 @@ type Food struct {
 	Nutrients      map[string]Nutrient `json:"nutrients"`
 	Verification   verification        `json:"verification"`
 
-	haystack string // lowercased searchable text, built at load
+	// NameEN is an English name supplied later by the assistant, not by TKPI. Empty
+	// means either "not yet named" or "has no English name" — Named() tells them apart.
+	NameEN     string `json:"name_en,omitempty"`
+	NameENFrom string `json:"name_en_source,omitempty"`
+	named      bool
+
+	haystack string // lowercased searchable text, rebuilt when an alias lands
 }
+
+// Named reports whether this food has been considered for an English name. A food can be
+// named and still have an empty NameEN — that records "no common English name exists",
+// which is a real answer and stops it being re-asked forever.
+func (f Food) Named() bool { return f.named }
 
 // Verified reports whether every cross-source check agreed on this row.
 func (f Food) Verified() bool { return f.Verification.Clean }
@@ -85,9 +97,67 @@ func (f Food) Macros(grams float64) Macros {
 func round2(v float64) float64 { return float64(int(v*100+0.5)) / 100 }
 
 type Table struct {
+	mu      sync.RWMutex
 	all     []Food
 	byCode  map[string]Food
 	flagged int
+}
+
+// SetAlias attaches an English name to a food and rebuilds its search text.
+//
+// nameEN may be empty: that records "this food has no common English name". Safe for
+// concurrent use, because MCP requests arrive in parallel while searches are running.
+func (t *Table) SetAlias(code, nameEN, source string) bool {
+	code = strings.ToUpper(strings.TrimSpace(code))
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	for i := range t.all {
+		if strings.ToUpper(t.all[i].Code) != code {
+			continue
+		}
+		t.all[i].NameEN = strings.TrimSpace(nameEN)
+		t.all[i].NameENFrom = source
+		t.all[i].named = true
+		t.all[i].haystack = haystackFor(t.all[i])
+		t.byCode[code] = t.all[i]
+		return true
+	}
+	return false
+}
+
+// Unnamed returns foods that have not yet been considered for an English name, so the
+// assistant can work through the table in batches rather than all 1,142 at once.
+func (t *Table) Unnamed(limit int) []Food {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	var out []Food
+	for _, f := range t.all {
+		if f.named {
+			continue
+		}
+		out = append(out, f)
+		if limit > 0 && len(out) >= limit {
+			break
+		}
+	}
+	return out
+}
+
+// NamedCount reports how many foods have been considered.
+func (t *Table) NamedCount() int {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	n := 0
+	for _, f := range t.all {
+		if f.named {
+			n++
+		}
+	}
+	return n
+}
+
+func haystackFor(f Food) string {
+	return strings.ToLower(f.NameID + " " + f.NameFull + " " + f.Group + " " + f.NameEN)
 }
 
 type document struct {
@@ -110,7 +180,7 @@ func Load(path string) (*Table, error) {
 	for _, f := range doc.Foods {
 		// Both names are searched: TKPI carries the Indonesian name and an English gloss,
 		// and a person logging in Bahasa or in English should find the same row.
-		f.haystack = strings.ToLower(f.NameID + " " + f.NameFull + " " + f.Group)
+		f.haystack = haystackFor(f)
 		t.all = append(t.all, f)
 		t.byCode[strings.ToUpper(f.Code)] = f
 		if !f.Verified() {
@@ -125,9 +195,18 @@ func Load(path string) (*Table, error) {
 
 func (t *Table) Count() int   { return len(t.all) }
 func (t *Table) Flagged() int { return t.flagged }
-func (t *Table) All() []Food  { return t.all }
+
+func (t *Table) All() []Food {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	out := make([]Food, len(t.all))
+	copy(out, t.all)
+	return out
+}
 
 func (t *Table) ByCode(code string) (Food, bool) {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
 	f, ok := t.byCode[strings.ToUpper(strings.TrimSpace(code))]
 	return f, ok
 }
@@ -162,6 +241,8 @@ func (t *Table) Search(query string, limit int) []Food {
 		f     Food
 		score int
 	}
+	t.mu.RLock()
+	defer t.mu.RUnlock()
 	var hits []hit
 	for _, f := range t.all {
 		score, ok := 0, true

@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"encoding/base64"
 	"strings"
 	"testing"
 
@@ -29,7 +30,7 @@ func mediaDeps(t *testing.T) (Deps, string) {
 func TestAttachMediaStoresAndReturnsAHash(t *testing.T) {
 	d, id := mediaDeps(t)
 	out, err := AttachMedia(d, AttachMediaArgs{Profile: id, Kind: "photo",
-		Data: []byte("pretend this is a jpeg")})
+		Data: b64("pretend this is a jpeg")})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,7 +59,7 @@ func TestAttachMediaRejectsEmptyDataAndBadKind(t *testing.T) {
 		t.Error("accepted an empty upload")
 	}
 	if _, err := AttachMedia(d, AttachMediaArgs{Profile: id, Kind: "video",
-		Data: []byte("x")}); err == nil {
+		Data: b64("x")}); err == nil {
 		t.Error("accepted an unsupported kind")
 	}
 }
@@ -78,7 +79,7 @@ func TestLogFoodRejectsAPhotoThatWasNeverStored(t *testing.T) {
 
 func TestLogFoodAttachesAStoredPhoto(t *testing.T) {
 	d, id := mediaDeps(t)
-	att, err := AttachMedia(d, AttachMediaArgs{Profile: id, Data: []byte("a meal photo")})
+	att, err := AttachMedia(d, AttachMediaArgs{Profile: id, Data: b64("a meal photo")})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,7 +107,7 @@ func TestListMediaIsScopedToTheProfile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := AttachMedia(d, AttachMediaArgs{Profile: id, Data: []byte("mine")}); err != nil {
+	if _, err := AttachMedia(d, AttachMediaArgs{Profile: id, Data: b64("mine")}); err != nil {
 		t.Fatal(err)
 	}
 	mine, err := ListMedia(d, ListMediaArgs{Profile: id})
@@ -129,11 +130,22 @@ func TestListMediaIsScopedToTheProfile(t *testing.T) {
 func TestGetMediaRefusesAnotherProfilesHash(t *testing.T) {
 	d, id := mediaDeps(t)
 	other, _ := Register(d, "mcp", "acct-2", "Dina", pass, pass)
-	att, err := AttachMedia(d, AttachMediaArgs{Profile: id, Data: []byte("private photo")})
+	att, err := AttachMedia(d, AttachMediaArgs{Profile: id, Data: b64("private photo")})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, _, err := GetMediaBytes(d, GetMediaArgs{Profile: other.ID, Hash: att.Hash}); err == nil {
 		t.Fatal("another profile read the blob using only its hash")
+	}
+}
+
+func b64(s string) string { return base64.StdEncoding.EncodeToString([]byte(s)) }
+
+// The schema generator maps []byte to an array of integers, which rejects the base64 every
+// client actually sends. This pins that `data` stays a plain string.
+func TestAttachMediaRejectsNonBase64(t *testing.T) {
+	d, id := mediaDeps(t)
+	if _, err := AttachMedia(d, AttachMediaArgs{Profile: id, Data: "not base64!!"}); err == nil {
+		t.Fatal("accepted data that is not base64")
 	}
 }

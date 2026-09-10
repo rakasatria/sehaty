@@ -3,6 +3,7 @@ package tools
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"strings"
@@ -29,9 +30,11 @@ func parseKind(s string) (media.Kind, error) {
 }
 
 type AttachMediaArgs struct {
-	Profile  string `json:"profile"`
-	Kind     string `json:"kind,omitempty" jsonschema:"photo or voice; defaults to photo"`
-	Data     []byte `json:"data" jsonschema:"the file itself, base64 encoded"`
+	Profile string `json:"profile"`
+	Kind    string `json:"kind,omitempty" jsonschema:"photo or voice; defaults to photo"`
+	// A string, not []byte: the schema generator maps []byte to an ARRAY OF INTEGERS,
+	// which rejects the base64 every client actually sends. Decoded explicitly below.
+	Data     string `json:"data" jsonschema:"the file itself, base64 encoded"`
 	MIMEType string `json:"mime_type,omitempty" jsonschema:"e.g. image/jpeg or audio/ogg"`
 }
 
@@ -59,10 +62,17 @@ func AttachMedia(d Deps, a AttachMediaArgs) (AttachMediaOut, error) {
 	if err != nil {
 		return AttachMediaOut{}, err
 	}
-	if len(a.Data) == 0 {
+	if strings.TrimSpace(a.Data) == "" {
 		return AttachMediaOut{}, fmt.Errorf("no data received; send the file base64 encoded in `data`")
 	}
-	hash, err := d.Media.Put(context.Background(), a.Profile, kind, bytes.NewReader(a.Data))
+	raw, err := base64.StdEncoding.DecodeString(strings.TrimSpace(a.Data))
+	if err != nil {
+		return AttachMediaOut{}, fmt.Errorf("`data` is not valid base64: %w", err)
+	}
+	if len(raw) == 0 {
+		return AttachMediaOut{}, fmt.Errorf("`data` decoded to nothing")
+	}
+	hash, err := d.Media.Put(context.Background(), a.Profile, kind, bytes.NewReader(raw))
 	if err != nil {
 		return AttachMediaOut{}, err
 	}
@@ -75,7 +85,7 @@ func AttachMedia(d Deps, a AttachMediaArgs) (AttachMediaOut, error) {
 		note = "Stored. Voice notes are kept as recorded; nothing transcribes them yet."
 	}
 	return AttachMediaOut{Profile: a.Profile, Kind: string(kind), Hash: hash,
-		Bytes: len(a.Data), MIMEType: mime, Note: note}, nil
+		Bytes: len(raw), MIMEType: mime, Note: note}, nil
 }
 
 type GetMediaArgs struct {
